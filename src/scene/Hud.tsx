@@ -13,8 +13,10 @@ export interface StageControls {
   speed: number;
   setSpeed: (n: 1 | 1.5 | 2) => void;
   onStop: () => void;
-  /** botão de voz (Task 11); desabilitado enquanto não houver handler */
+  /** botão de voz; desabilitado sem handler ou sem vozes no navegador */
   onVoice?: () => void;
+  voiceOn?: boolean;
+  voiceAvailable?: boolean;
 }
 
 const panel: React.CSSProperties = { background: 'rgba(5,20,22,.85)', color: '#e8f1f1', borderRadius: 8, padding: '8px 12px', fontSize: 13 };
@@ -56,8 +58,11 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
         <button type="button" style={btn} aria-label="Alternar câmera (tecla C)" onClick={onCamera}>
           Câmera: {CAMERA_LABEL[camera]}
         </button>
-        <button type="button" style={{ ...btn, opacity: controls.onVoice ? 1 : 0.5 }} aria-label="Voz" disabled={!controls.onVoice} onClick={controls.onVoice}>
-          🔊 Voz
+        <button type="button" aria-label="Voz" aria-pressed={!!controls.voiceOn}
+          style={{ ...btn, ...(controls.voiceOn ? { background: '#b5762f' } : {}), opacity: controls.voiceAvailable ? 1 : 0.5 }}
+          disabled={!controls.onVoice || !controls.voiceAvailable}
+          title={controls.voiceAvailable ? undefined : 'Seu navegador não tem voz disponível'} onClick={controls.onVoice}>
+          {controls.voiceOn ? '🔊 Voz: ligada' : '🔇 Voz'}
         </button>
         <button type="button" style={{ ...btn, background: '#7a2323' }} aria-label="Encerrar debate" onClick={controls.onStop}>
           Encerrar

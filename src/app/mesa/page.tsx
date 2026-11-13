@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLiveDebate, useReplay } from '@/client/useLiveDebate';
 import { parseReplay, type Replay } from '@/client/replay';
+import { useVoice } from '@/voice/useVoice';
 import type { DebateConfig, ProviderId } from '@/types';
 
 const Stage = dynamic(() => import('@/scene/Stage').then((m) => m.Stage), { ssr: false });
@@ -41,8 +42,13 @@ function ReplayLoader({ name }: { name: string }) {
 
 function ReplayRun({ replay }: { replay: Replay }) {
   const router = useRouter();
-  const r = useReplay(replay);
-  return <Stage scene={r.scene} defaultCamera="diretor" controls={{ ...r, onStop: () => router.push('/') }} />;
+  const v = useVoice();
+  const r = useReplay(replay, v.waitFor);
+  v.config.current = r.scene.config;
+  return (
+    <Stage scene={r.scene} defaultCamera="diretor"
+      controls={{ ...r, onStop: () => router.push('/'), onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }} />
+  );
 }
 
 function readSession<T>(key: string): T | undefined {
@@ -56,7 +62,9 @@ function readSession<T>(key: string): T | undefined {
 
 function Live() {
   const router = useRouter();
-  const d = useLiveDebate();
+  const v = useVoice();
+  const d = useLiveDebate(v.waitFor);
+  v.config.current = d.scene.config;
   const { start, stop } = d;
   const [ready, setReady] = useState(false);
   useEffect(() => {
@@ -70,7 +78,8 @@ function Live() {
     <Stage
       scene={d.scene}
       defaultCamera="orbita"
-      controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); } }}
+      controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
+        onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }}
     />
   );
 }

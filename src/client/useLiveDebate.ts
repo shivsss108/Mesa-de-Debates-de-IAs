@@ -16,7 +16,7 @@ export async function runLiveLoop(
     fetchStep: (body: object, signal: AbortSignal) => Promise<ReadableStream<Uint8Array>>;
     signal: AbortSignal;
     paused: () => boolean;
-    waitFor?: () => Promise<void>;
+    waitFor?: (e: DebateEvent) => Promise<void>;
   },
 ): Promise<DebateEvent[]> {
   const { signal } = opts;
@@ -35,7 +35,7 @@ export async function runLiveLoop(
           const e = JSON.parse(m.data) as DebateEvent;
           events.push(e);
           onEvent(e);
-          if (e.type === 'turn_end') await opts.waitFor?.();
+          if (e.type === 'turn_end') await opts.waitFor?.(e);
         }
       }
       // step sem `state` (ou abortado) conta como erro: não dispara novo passo
@@ -58,12 +58,14 @@ export async function runLiveLoop(
   return events;
 }
 
-export function useLiveDebate() {
+export function useLiveDebate(waitFor?: (e: DebateEvent) => Promise<void>) {
   const [scene, dispatch] = useReducer(sceneReducer, initialScene);
   const [events, setEvents] = useState<DebateEvent[]>([]);
   const [speed, setSpeedState] = useState<number>(1);
   const ctl = useRef<AbortController | null>(null);
   const paused = useRef(false);
+  const waitRef = useRef(waitFor);
+  waitRef.current = waitFor;
 
   const stop = useCallback(() => ctl.current?.abort(), []);
   useEffect(() => stop, [stop]); // sair da página aborta o passo em andamento
@@ -93,7 +95,7 @@ export function useLiveDebate() {
         dispatch(e);
         setEvents((p) => [...p, e]);
       },
-      { fetchStep, signal: c.signal, paused: () => paused.current },
+      { fetchStep, signal: c.signal, paused: () => paused.current, waitFor: (e) => waitRef.current?.(e) ?? Promise.resolve() },
     );
   }, []);
 
@@ -108,16 +110,18 @@ export function useLiveDebate() {
   };
 }
 
-export function useReplay(replay: Replay) {
+export function useReplay(replay: Replay, waitFor?: (e: DebateEvent) => Promise<void>) {
   const [scene, dispatch] = useReducer(sceneReducer, initialScene);
   const [speed, setSpeedState] = useState<number>(1);
   const speedRef = useRef(1);
   const paused = useRef(false);
+  const waitRef = useRef(waitFor);
+  waitRef.current = waitFor;
   speedRef.current = speed;
 
   useEffect(() => {
     const c = new AbortController();
-    void playReplay(replay, dispatch, { speed: () => speedRef.current, paused: () => paused.current, signal: c.signal });
+    void playReplay(replay, dispatch, { speed: () => speedRef.current, paused: () => paused.current, signal: c.signal, waitFor: (e) => waitRef.current?.(e) ?? Promise.resolve() });
     return () => c.abort();
   }, [replay]);
 

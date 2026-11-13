@@ -14,7 +14,7 @@ export function parseReplay(json: unknown): Replay {
 export async function playReplay(
   replay: Replay,
   onEvent: (e: DebateEvent) => void,
-  opts: { speed: () => number; paused: () => boolean; signal: AbortSignal; waitFor?: () => Promise<void> },
+  opts: { speed: () => number; paused: () => boolean; signal: AbortSignal; waitFor?: (e: DebateEvent) => Promise<void> },
 ): Promise<void> {
   let prev: DebateEvent | undefined;
   for (const e of replay.events) {
@@ -22,7 +22,7 @@ export async function playReplay(
     while (opts.paused() && !opts.signal.aborted) await sleep(200);
     if (opts.signal.aborted) return;
     onEvent(e);
-    if (e.type === 'turn_end') await opts.waitFor?.();
+    if (e.type === 'turn_end') await opts.waitFor?.(e);
     prev = e;
   }
 }
