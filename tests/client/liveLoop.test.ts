@@ -49,6 +49,29 @@ describe('runLiveLoop', () => {
     expect(out).toHaveLength(1);
   });
 
+  it('falha não-abort vira evento error gravado e emitido', async () => {
+    const got: DebateEvent[] = [];
+    const out = await runLiveLoop(config, {}, (e) => got.push(e), {
+      fetchStep: async () => { throw new Error('boom'); },
+      signal: new AbortController().signal,
+      paused: () => false,
+    });
+    expect(out.at(-1)).toMatchObject({ type: 'error', message: 'boom', seq: 0 });
+    expect(got).toEqual(out);
+  });
+
+  it('AbortError após abort() resolve sem evento error', async () => {
+    const ctl = new AbortController();
+    const got: DebateEvent[] = [];
+    const out = await runLiveLoop(config, {}, (e) => got.push(e), {
+      fetchStep: async () => { ctl.abort(); throw new DOMException('aborted', 'AbortError'); },
+      signal: ctl.signal,
+      paused: () => false,
+    });
+    expect(out).toEqual([]);
+    expect(got).toEqual([]);
+  });
+
   it('passo sem evento state encerra o loop', async () => {
     const fetchStep = vi.fn(async () => sse([], false).pipeThrough(new TransformStream({ transform() {} })));
     await runLiveLoop(config, {}, () => {}, { fetchStep, signal: new AbortController().signal, paused: () => false });

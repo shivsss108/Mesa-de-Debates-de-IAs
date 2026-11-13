@@ -42,8 +42,18 @@ export async function runLiveLoop(
       if (!next) break;
       state = next;
     }
-  } catch {
-    // abort ou falha de rede: devolve o que foi gravado
+  } catch (err) {
+    // abort fica em silêncio; qualquer outra falha vira evento `error` para a cena mostrar
+    if (!signal.aborted) {
+      const message = err instanceof Error && err.message ? err.message : 'Falha ao executar o passo do debate.';
+      const e: DebateEvent = { type: 'error', message, seq: events.length, t: events.at(-1)?.t ?? 0 };
+      events.push(e);
+      try {
+        onEvent(e);
+      } catch {
+        // onEvent quebrado não pode derrubar o retorno dos eventos gravados
+      }
+    }
   }
   return events;
 }
@@ -70,7 +80,10 @@ export function useLiveDebate() {
         body: JSON.stringify(body),
         signal,
       });
-      if (!res.ok || !res.body) throw new Error(`Falha no passo (${res.status})`);
+      if (!res.ok || !res.body) {
+        const detail = await res.json().then((j: { error?: unknown }) => j?.error, () => undefined);
+        throw new Error(typeof detail === 'string' && detail ? detail : `Falha no passo (${res.status}).`);
+      }
       return res.body;
     };
     void runLiveLoop(
