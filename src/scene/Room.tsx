@@ -2,7 +2,8 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 
-export const ROOM = 12; // lado da sala (u); limite da câmera livre = ROOM/2
+/** lado da sala cresce com o raio da mesa; limite da câmera livre = lado/2 */
+export const roomSize = (radius: number) => 2 * (radius + 5);
 
 function makeNoise() {
   const c = document.createElement('canvas');
@@ -23,17 +24,17 @@ function makeNoise() {
 }
 
 /** Sala azul-petróleo com textura de ruído (estilo pictórico/granulado da referência). */
-export function Room() {
+export function Room({ size }: { size: number }) {
   const noise = useMemo(makeNoise, []);
   return (
     <group>
       <color attach="background" args={['#0f2a2e']} />
       <mesh position={[0, 2.5, 0]}>
-        <boxGeometry args={[ROOM, 5, ROOM]} />
+        <boxGeometry args={[size, 5, size]} />
         <meshToonMaterial side={THREE.BackSide} map={noise} color="#2a5a5f" />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2}>
-        <planeGeometry args={[ROOM, ROOM]} />
+      <mesh position={[0, 0.01, 0]} rotation-x={-Math.PI / 2}>
+        <planeGeometry args={[size, size]} />
         <meshToonMaterial map={noise} color="#1a3a3e" />
       </mesh>
     </group>

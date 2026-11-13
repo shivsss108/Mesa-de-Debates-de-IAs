@@ -7,7 +7,7 @@ import { resolveTemperamento } from '@/presets/temperamentos';
 import type { SceneState } from '@/scene/sceneReducer';
 import type { Skin } from '@/skins/types';
 import { defaultRadius, seatPositions } from '@/scene/layout';
-import { Room } from '@/scene/Room';
+import { Room, roomSize } from '@/scene/Room';
 import { Table } from '@/scene/Table';
 import { Cameras, type CameraMode } from '@/scene/Cameras';
 import { Hud, type StageControls } from '@/scene/Hud';
@@ -71,10 +71,10 @@ export function Stage({ scene, skin = placeholderSkin, controls, defaultCamera =
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0f2a2e' }}>
-      <Canvas camera={{ position: [0, 3.6, radius + 4.2], fov: 55 }} dpr={[1, 2]}>
-        <ambientLight intensity={0.9} color="#9fc9cc" />
-        <pointLight position={[0, 3, 0]} color="#ffb870" intensity={30} distance={0} decay={2} />
-        <Room />
+      <Canvas camera={{ position: [0, 3.2, radius + 3], fov: 55 }} dpr={[1, 2]}>
+        <ambientLight intensity={1.2} color="#9fc9cc" />
+        <pointLight position={[0, 3, 0]} color="#ffb870" intensity={8} distance={0} decay={2} />
+        <Room size={roomSize(radius)} />
         <Table radius={radius - 0.55} />
         {ids.map((id, i) => {
           const view = scene.members[id];

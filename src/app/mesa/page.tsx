@@ -31,7 +31,9 @@ function ReplayLoader({ name }: { name: string }) {
   useEffect(() => {
     const load = REPLAYS[name];
     if (!load) return setErr(`Replay "${name}" não encontrado.`);
-    load().then((j) => setReplay(parseReplay(j)), (e: Error) => setErr(e.message));
+    load()
+      .then((j) => setReplay(parseReplay(j)))
+      .catch((e: Error) => setErr(e.message));
   }, [name]);
   if (err) return <p role="alert" style={{ color: '#fff', padding: 24 }}>{err}</p>;
   return replay ? <ReplayRun replay={replay} /> : null;

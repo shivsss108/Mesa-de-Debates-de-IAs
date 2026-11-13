@@ -5,13 +5,12 @@ import { OrbitControls, PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
-import { ROOM } from '@/scene/Room';
+import { roomSize } from '@/scene/Room';
 import { typingTarget } from '@/scene/keys';
 
 export type CameraMode = 'diretor' | 'orbita' | 'livre';
 export const CAMERA_LABEL: Record<CameraMode, string> = { diretor: 'Diretor', orbita: 'Órbita', livre: 'Livre' };
 const SPEED = 3; // u/s
-const LIMIT = ROOM / 2 - 0.5;
 const CLOSE_MS = 1500;
 
 interface Props {
@@ -25,14 +24,24 @@ interface Props {
 export function Cameras({ mode, scene, posOf, radius }: Props) {
   return (
     <>
-      {mode === 'orbita' && <OrbitControls makeDefault target={[0, 0.8, 0]} maxPolarAngle={Math.PI / 2 - 0.05} />}
-      {mode === 'livre' && <FreeCam />}
+      {mode === 'orbita' && <OrbitCam radius={radius} />}
+      {mode === 'livre' && <FreeCam limit={roomSize(radius) / 2 - 0.5} />}
       {mode === 'diretor' && <DirectorCam scene={scene} posOf={posOf} radius={radius} />}
     </>
   );
 }
 
-function FreeCam() {
+function OrbitCam({ radius }: { radius: number }) {
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    camera.position.set(0, 3.2, radius + 3); // plano aberto ao entrar na órbita
+  }, [camera, radius]);
+  return (
+    <OrbitControls makeDefault target={[0, 0.8, 0]} minDistance={2} maxDistance={Math.min(9, roomSize(radius) / 2 - 0.5)} maxPolarAngle={Math.PI / 2 - 0.05} />
+  );
+}
+
+function FreeCam({ limit }: { limit: number }) {
   const camera = useThree((s) => s.camera);
   const keys = useRef(new Set<string>());
   useEffect(() => {
@@ -58,8 +67,8 @@ function FreeCam() {
     const side = new THREE.Vector3().crossVectors(dir, camera.up).normalize();
     const step = SPEED * Math.min(dt, 0.1);
     camera.position.addScaledVector(dir, f * step).addScaledVector(side, r * step);
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -LIMIT, LIMIT);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -LIMIT, LIMIT);
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -limit, limit);
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -limit, limit);
   });
   return <PointerLockControls selector="canvas" />;
 }
@@ -87,13 +96,14 @@ function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | '
     const id = c ?? sp;
     const p = id && id !== MODERATOR_ID ? posOf[id] : undefined;
     if (!p) {
-      cam.set(0, 3.6, radius + 4.2);
+      cam.set(0, 3.2, radius + 3);
       look.set(0, 0.8, 0);
     } else {
       const dir = new THREE.Vector3(p[0], 0, p[2]).normalize();
-      const back = c ? 1.3 : 2.4;
-      cam.set(p[0] - dir.x * back, c ? 1.6 : 1.9, p[2] - dir.z * back);
-      look.set(p[0], 1.3, p[2]);
+      // de frente e acima do orador, além do lado oposto da mesa: vê vizinhos e parte da mesa
+      const back = c ? 2.2 : radius + 3.2;
+      cam.set(p[0] - dir.x * back, c ? 1.9 : 2.4, p[2] - dir.z * back);
+      look.set(p[0], c ? 1.4 : 1.5, p[2]);
     }
     const a = 1 - Math.exp(-3 * dt);
     camera.position.lerp(cam, a);
