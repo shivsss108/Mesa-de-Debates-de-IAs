@@ -12,12 +12,17 @@ export function resetCatalogCache() {
   cache.clear();
 }
 
+/** Chaves do servidor só em dev ou com opt-in explícito: num deploy público, qualquer visitante as usaria. */
+export function envKeysAllowed(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.MESA_ALLOW_ENV_KEYS === '1';
+}
+
 export function resolveKey(p: ProviderId, keys: Keys): string | undefined {
-  return keys[p] || process.env[PROVIDERS[p].envKey] || undefined;
+  return keys[p] || (envKeysAllowed() ? process.env[PROVIDERS[p].envKey] : undefined) || undefined;
 }
 
 const defaultFetchModels: FetchModels = async (p, key) => {
-  const res = await fetch(`${PROVIDERS[p].baseURL}/models`, { headers: { Authorization: `Bearer ${key}` } });
+  const res = await fetch(`${PROVIDERS[p].baseURL}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = (await res.json()) as { data?: { id: string }[] };
   // Google devolve ids como "models/gemini-..."

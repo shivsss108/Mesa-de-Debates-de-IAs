@@ -38,6 +38,7 @@ export const chat: ChatFn = async function* ({ provider, model, messages, apiKey
     baseURL: PROVIDERS[provider].baseURL,
     dangerouslyAllowBrowser: false,
     maxRetries: 0,
+    timeout: 20_000,
   });
   try {
     const stream = await client.chat.completions.create(

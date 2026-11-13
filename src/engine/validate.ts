@@ -31,12 +31,18 @@ export function validateStepBody(body: unknown): { ok: true; value: StepBody } |
   if (!isObj(state) || !Array.isArray(state.history) || !isObj(state.lastCallAt)) return bad('Estado inválido.');
   if (keys !== undefined && !isObj(keys)) return bad('keys inválido.');
   if (!Number.isInteger(seqStart) || (seqStart as number) < 0) return bad('seqStart inválido.');
+  // só provedores conhecidos, strings aparadas, sem vazias
+  const clean: Keys = {};
+  for (const p of Object.keys(PROVIDERS) as ProviderId[]) {
+    const k = keys?.[p];
+    if (typeof k === 'string' && k.trim()) clean[p] = k.trim();
+  }
   return {
     ok: true,
     value: {
       config: config as unknown as DebateConfig,
       state: state as unknown as DebateState,
-      keys: (keys ?? {}) as Keys,
+      keys: clean,
       seqStart: seqStart as number,
     },
   };

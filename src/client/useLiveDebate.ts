@@ -38,8 +38,11 @@ export async function runLiveLoop(
           if (e.type === 'turn_end') await opts.waitFor?.(e);
         }
       }
-      // step sem `state` (ou abortado) conta como erro: não dispara novo passo
-      if (!next) break;
+      // step sem `state` conta como erro e não dispara novo passo (o servidor pode já ter mandado o seu `error`)
+      if (!next) {
+        if (signal.aborted || events.at(-1)?.type === 'error') break;
+        throw new Error('O passo não terminou. Tente novamente.');
+      }
       state = next;
     }
   } catch (err) {

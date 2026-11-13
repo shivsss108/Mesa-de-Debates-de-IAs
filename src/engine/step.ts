@@ -1,4 +1,4 @@
-import type { ChatFn, ChatMessage } from '@/providers/client';
+import { ProviderError, type ChatFn, type ChatMessage } from '@/providers/client';
 import { PROVIDERS } from '@/providers/table';
 import { resolveKey } from '@/providers/catalog';
 import { resolveTemperamento } from '@/presets/temperamentos';
@@ -19,14 +19,20 @@ export interface StepDeps {
 
 export const BACKOFF_MS = [1000, 2000, 4000];
 export const SUMMARY_EVERY = 5;
+export const MEMBER_MAX_TOKENS = 300;
+export const MODERATOR_MAX_TOKENS = 400;
 const JSON_ONLY = 'Responda somente o JSON.';
 
 type Body = DebateEvent extends infer E ? (E extends DebateEvent ? Omit<E, 'seq' | 't'> : never) : never;
 
-class MissingKey extends Error {
-  constructor(readonly provider: ProviderId) {
-    super(`Sem chave de API para ${PROVIDERS[provider].nome}.`);
-  }
+/** Chave ausente ou recusada (401/403): encerra o debate com `error`, sem retry. */
+class KeyError extends Error {}
+
+/** ProviderError 401/403 vira KeyError com o nome do provedor; o resto passa intacto. */
+function asKeyError(p: ProviderId, e: unknown): unknown {
+  return e instanceof ProviderError && (e.status === 401 || e.status === 403)
+    ? new KeyError(`Chave inválida para ${PROVIDERS[p].nome}.`)
+    : e;
 }
 
 /**
@@ -42,7 +48,7 @@ export async function* runStep(
   const s = structuredClone(state);
   let seq = seqStart;
   try {
-    for await (const e of step(config, s, deps)) {
+    for await (const e of step(config, s, deps, seqStart)) {
       if (deps.signal?.aborted) return s;
       yield { ...e, seq: seq++, t: deps.now() - s.startedAt } as DebateEvent;
     }
@@ -57,14 +63,14 @@ function isAbort(e: unknown, signal?: AbortSignal): boolean {
   return !!signal?.aborted || (e instanceof Error && e.name === 'AbortError');
 }
 
-async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): AsyncGenerator<Body> {
-  /** Erros que não são falha do provedor: sobem direto, sem retry. */
-  const fatal = (e: unknown) => e instanceof MissingKey || isAbort(e, deps.signal);
+async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqStart: number): AsyncGenerator<Body> {
+  /** Erros que não são falha passageira do provedor: sobem direto, sem retry. */
+  const fatal = (e: unknown) => e instanceof KeyError || isAbort(e, deps.signal);
 
   /** Rate gate por provedor (compartilhado entre assentos) antes de cada chamada; devolve a chave. */
   async function gate(p: ProviderId): Promise<string> {
     const key = resolveKey(p, deps.keys);
-    if (!key) throw new MissingKey(p);
+    if (!key) throw new KeyError(`Sem chave de API para ${PROVIDERS[p].nome}.`);
     const last = s.lastCallAt[p];
     const wait = last === undefined ? 0 : PROVIDERS[p].minIntervalMs - (deps.now() - last);
     if (wait > 0) await deps.sleep(wait);
@@ -79,9 +85,11 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
       try {
         const apiKey = await gate(p);
         let out = '';
-        for await (const c of deps.chat({ provider: p, model, messages, apiKey, signal: deps.signal })) out += c;
+        for await (const c of deps.chat({ provider: p, model, messages, apiKey, signal: deps.signal, maxTokens: MODERATOR_MAX_TOKENS }))
+          out += c;
         return out;
-      } catch (e) {
+      } catch (err) {
+        const e = asKeyError(p, err);
         if (fatal(e)) throw e;
         last = e;
         await deps.sleep(backoff);
@@ -112,7 +120,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
   }
 
   try {
-    if (s.memberTurns === 0 && s.history.length === 0) yield { type: 'debate_start', config };
+    if (seqStart === 0) yield { type: 'debate_start', config };
     if (s.memberTurns >= config.maxTurns) return yield* closing();
 
     // 1. Moderador
@@ -148,7 +156,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
       let errored = false;
       try {
         const apiKey = await gate(seat.provider);
-        for await (const chunk of deps.chat({ provider: seat.provider, model: seat.model, messages, apiKey, signal: deps.signal })) {
+        const req = { provider: seat.provider, model: seat.model, messages, apiKey, signal: deps.signal, maxTokens: MEMBER_MAX_TOKENS };
+        for await (const chunk of deps.chat(req)) {
           raw += chunk;
           let out = splitter.push(chunk);
           if (!started) {
@@ -159,7 +168,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
           }
           yield { type: 'token', speaker: m, text: out };
         }
-      } catch (e) {
+      } catch (err) {
+        const e = asKeyError(seat.provider, err);
         if (fatal(e)) throw e;
         errored = true;
       }
@@ -181,6 +191,12 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
       s.failures[m] = (s.failures[m] ?? 0) + 1;
       s.offline[m] = s.memberTurns;
       yield { type: 'status', member: m, state: 'sem_sinal' };
+      // o cooldown de offline conta memberTurns, que não avançam se ninguém fala: sem este freio a mesa gira para sempre
+      s.stalledSteps = (s.stalledSteps ?? 0) + 1;
+      if (s.stalledSteps >= config.seats.length) {
+        s.done = true;
+        yield { type: 'error', message: 'Nenhum membro conseguiu falar. Verifique as chaves e os modelos.' };
+      }
       return;
     }
 
@@ -196,6 +212,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
     s.memberTurns++;
     s.lastSpokeTurn[m] = s.memberTurns;
     s.failures[m] = 0;
+    s.stalledSteps = 0;
 
     // 3. Mãos e resumo
     s.hands = computeHands({
@@ -221,7 +238,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): Asyn
       }
     }
   } catch (e) {
-    if (!(e instanceof MissingKey)) throw e;
+    if (!(e instanceof KeyError)) throw e;
     s.done = true;
     yield { type: 'error', message: e.message };
   }

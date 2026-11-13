@@ -18,24 +18,33 @@ export async function POST(req: Request) {
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(ctrl) {
-      const send = (s: string) => ctrl.enqueue(enc.encode(s));
-      let next = state;
+      // cliente desconectado: enqueue/close lançariam; não há mais a quem entregar
+      const send = (s: string) => {
+        if (req.signal.aborted) return;
+        try {
+          ctrl.enqueue(enc.encode(s));
+        } catch {}
+      };
+      let sent = 0;
       try {
         const gen = runStep(config, state, { chat, keys, now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), signal: req.signal }, seqStart);
         for (;;) {
           const r = await gen.next();
           if (r.done) {
-            next = r.value;
+            send(`event: state\ndata: ${JSON.stringify(r.value)}\n\n`);
             break;
           }
           send(`data: ${JSON.stringify(r.value)}\n\n`);
+          sent++;
         }
       } catch {
-        // mensagem genérica: nunca ecoar detalhes que possam conter chaves
-        send(`data: ${JSON.stringify({ type: 'error', message: 'Falha interna ao executar o passo.', seq: seqStart, t: 0 })}\n\n`);
+        // mensagem genérica: nunca ecoar detalhes que possam conter chaves.
+        // Sem `event: state`: o cliente trata isso como fim do debate.
+        send(`data: ${JSON.stringify({ type: 'error', message: 'Falha interna ao executar o passo.', seq: seqStart + sent, t: 0 })}\n\n`);
       }
-      send(`event: state\ndata: ${JSON.stringify(next)}\n\n`);
-      ctrl.close();
+      try {
+        ctrl.close();
+      } catch {}
     },
   });
   return new Response(stream, {

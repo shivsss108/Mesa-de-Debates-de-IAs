@@ -13,6 +13,7 @@ export function createInitialState(config: DebateConfig, now: number): DebateSta
     offline: {},
     hands: [],
     lastCallAt: {},
+    stalledSteps: 0,
     done: false,
   };
 }

@@ -51,6 +51,8 @@ export interface DebateState {
   offline: Record<string, number>;
   hands: HandEntry[];
   lastCallAt: Partial<Record<ProviderId, number>>;
+  /** passos seguidos sem turno de membro com sucesso (estado antigo sem o campo = 0) */
+  stalledSteps: number;
   done: boolean;
   pendingAddress?: { to: string; text: string };
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const mock = vi.hoisted(() => ({ throws: false }));
 vi.mock('@/engine/step', () => ({
   runStep: async function* () {
     yield { type: 'token', speaker: 'a', text: 'oi', seq: 5, t: 0 };
+    if (mock.throws) throw new Error('segredo-interno');
     return { done: true, history: [], lastCallAt: {} };
   },
 }));
@@ -32,6 +34,10 @@ describe('validateStepBody', () => {
     expect(validateStepBody(body({ tema: '  ' })).ok).toBe(false);
     expect(validateStepBody(null).ok).toBe(false);
   });
+  it('keys: só provedores conhecidos, string aparada, sem vazias', () => {
+    const v = validateStepBody({ ...body(), keys: { groq: '  k \n', xai: 'x', nvidia: 5, mistral: '   ' } });
+    expect(v.ok && v.value.keys).toEqual({ groq: 'k' });
+  });
 });
 
 describe('POST /api/debate/step', () => {
@@ -46,5 +52,17 @@ describe('POST /api/debate/step', () => {
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     expect(text).toContain('data: {"type":"token"');
     expect(text.trimEnd().split('\n\n').pop()).toMatch(/^event: state\ndata: \{/);
+  });
+  it('runStep lança → evento error com seq após os enviados, sem event: state', async () => {
+    mock.throws = true;
+    try {
+      const text = await (await POST(req(body()))).text();
+      expect(text).not.toContain('event: state');
+      expect(text).not.toContain('segredo-interno');
+      const last = JSON.parse(text.trimEnd().split('\n\n').pop()!.replace(/^data: /, ''));
+      expect(last).toMatchObject({ type: 'error', seq: 6 });
+    } finally {
+      mock.throws = false;
+    }
   });
 });

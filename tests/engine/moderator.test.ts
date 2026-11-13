@@ -11,7 +11,7 @@ const cfg: DebateConfig = {
   seats: [seat('m1'), seat('m2'), seat('m3')],
 };
 const st = (over: Partial<DebateState> = {}): DebateState => ({
-  startedAt: 0, memberTurns: 5, summary: '', history: [], stances: {}, lastSpokeTurn: {},
+  startedAt: 0, memberTurns: 5, summary: '', history: [], stances: {}, lastSpokeTurn: {}, stalledSteps: 0,
   failures: {}, moderatorFailures: 0, offline: {}, hands: [], lastCallAt: {}, done: false, ...over,
 });
 const d = (para?: string) => ({ acao: 'passar_palavra' as const, para, fala: 'x' });

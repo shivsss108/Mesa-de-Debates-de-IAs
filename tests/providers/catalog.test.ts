@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCatalog, resetCatalogCache } from '@/providers/catalog';
+import { getCatalog, resetCatalogCache, resolveKey } from '@/providers/catalog';
 
 beforeEach(() => {
   resetCatalogCache();
@@ -10,6 +10,20 @@ beforeEach(() => {
 });
 
 const keys = { openrouter: 'k1', groq: 'k2' };
+
+describe('resolveKey', () => {
+  it('chave do cliente vence; env só fora de produção ou com MESA_ALLOW_ENV_KEYS=1', () => {
+    vi.stubEnv('GROQ_API_KEY', 'env-k');
+    expect(resolveKey('groq', { groq: 'cli' })).toBe('cli');
+    vi.stubEnv('NODE_ENV', 'development');
+    expect(resolveKey('groq', {})).toBe('env-k');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(resolveKey('groq', {})).toBeUndefined();
+    expect(resolveKey('groq', { groq: 'cli' })).toBe('cli');
+    vi.stubEnv('MESA_ALLOW_ENV_KEYS', '1');
+    expect(resolveKey('groq', {})).toBe('env-k');
+  });
+});
 
 describe('getCatalog', () => {
   it('marca free corretamente e omite provider sem chave', async () => {

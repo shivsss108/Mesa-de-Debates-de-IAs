@@ -72,9 +72,24 @@ describe('runLiveLoop', () => {
     expect(got).toEqual([]);
   });
 
-  it('passo sem evento state encerra o loop', async () => {
+  it('passo sem evento state encerra o loop com error', async () => {
     const fetchStep = vi.fn(async () => sse([], false).pipeThrough(new TransformStream({ transform() {} })));
-    await runLiveLoop(config, {}, () => {}, { fetchStep, signal: new AbortController().signal, paused: () => false });
+    const got: DebateEvent[] = [];
+    const out = await runLiveLoop(config, {}, (e) => got.push(e), { fetchStep, signal: new AbortController().signal, paused: () => false });
     expect(fetchStep).toHaveBeenCalledTimes(1);
+    expect(out).toEqual([expect.objectContaining({ type: 'error', message: 'O passo não terminou. Tente novamente.', seq: 0 })]);
+    expect(got).toEqual(out);
+  });
+
+  it('passo sem state que já trouxe error do servidor não duplica o error', async () => {
+    const err: DebateEvent = { seq: 0, t: 0, type: 'error', message: 'Falha interna ao executar o passo.' };
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(err)}\n\n`));
+        c.close();
+      },
+    });
+    const out = await runLiveLoop(config, {}, () => {}, { fetchStep: async () => stream, signal: new AbortController().signal, paused: () => false });
+    expect(out).toEqual([err]);
   });
 });

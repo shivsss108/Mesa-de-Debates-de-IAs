@@ -57,6 +57,10 @@ CEREBRAS_API_KEY=
 
 Também dá para colar as chaves na tela de configuração (ficam só em `sessionStorage`).
 
+### Deploy público: não defina chaves no servidor
+
+Chaves no ambiente do servidor valem para qualquer visitante, que gastaria a sua cota. Por isso, em produção (`NODE_ENV=production`) o servidor ignora essas variáveis e cada pessoa cola as próprias chaves na tela. Só defina `MESA_ALLOW_ENV_KEYS=1` se o deploy for privado (por exemplo, atrás de login).
+
 ```bash
 npm run dev      # http://localhost:3000
 npm test         # testes (Vitest)
