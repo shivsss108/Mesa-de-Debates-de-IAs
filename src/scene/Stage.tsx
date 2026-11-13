@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Outlines, Stats } from '@react-three/drei';
+import { Stats } from '@react-three/drei';
 import { MODERATOR_ID } from '@/types';
-import { resolveTemperamento } from '@/presets/temperamentos';
 import type { SceneState } from '@/scene/sceneReducer';
 import type { Skin } from '@/skins/types';
+import { ternoSkin } from '@/skins/terno';
 import { defaultRadius, seatPositions } from '@/scene/layout';
 import { Room, roomSize } from '@/scene/Room';
 import { Table } from '@/scene/Table';
@@ -17,34 +17,7 @@ import { typingTarget } from '@/scene/keys';
 
 const MODES: CameraMode[] = ['diretor', 'orbita', 'livre'];
 
-/** Skin provisório (Task 10 traz o definitivo): cápsula colorida + cabeça esférica. */
-export const placeholderSkin: Skin = {
-  Avatar({ seat, view, isSpeaker }) {
-    const color = seat === 'moderador' ? '#222' : resolveTemperamento(seat.temperamento).corGravata;
-    return (
-      <group scale={isSpeaker ? 1.05 : 1}>
-        <mesh position={[0, 0.8, 0]}>
-          <capsuleGeometry args={[0.2, 0.7, 4, 12]} />
-          <meshToonMaterial color={color} />
-          <Outlines thickness={0.02} color="black" />
-        </mesh>
-        <mesh position={[0, 1.55, 0]}>
-          <sphereGeometry args={[0.2, 24, 16]} />
-          <meshToonMaterial color="#fff" />
-          <Outlines thickness={0.02} color="black" />
-        </mesh>
-        {view.handUp && (
-          <mesh position={[0.3, 1.9, 0]}>
-            <sphereGeometry args={[0.08, 12, 8]} />
-            <meshToonMaterial color="#ffd54f" />
-          </mesh>
-        )}
-      </group>
-    );
-  },
-};
-
-export function Stage({ scene, skin = placeholderSkin, controls, defaultCamera = 'orbita' }: {
+export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbita' }: {
   scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode;
 }) {
   const [mode, setMode] = useState<CameraMode>(defaultCamera);
@@ -67,6 +40,7 @@ export function Stage({ scene, skin = placeholderSkin, controls, defaultCamera =
   const ids = [MODERATOR_ID, ...seats.map((s) => s.id)];
   const posOf = Object.fromEntries(ids.map((id, i) => [id, poses[i].position])) as Record<string, [number, number, number]>;
   const speakerPos = scene.speaker ? posOf[scene.speaker] : undefined;
+  const speakerStance = scene.speaker ? scene.members[scene.speaker]?.stance : undefined;
   const Avatar = skin.Avatar;
 
   return (
@@ -88,7 +62,7 @@ export function Stage({ scene, skin = placeholderSkin, controls, defaultCamera =
               onPointerOver={(e) => { e.stopPropagation(); setHovered(id); }}
               onPointerOut={() => setHovered((h) => (h === id ? undefined : h))}
             >
-              <Avatar seat={seat} view={view} isSpeaker={scene.speaker === id} speakerPos={speakerPos} />
+              <Avatar seat={seat} view={view} isSpeaker={scene.speaker === id} speakerPos={speakerPos} addressed={scene.addressedTo === id} speakerStance={speakerStance} />
             </group>
           );
         })}
