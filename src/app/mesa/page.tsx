@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLiveDebate, useReplay } from '@/client/useLiveDebate';
 import { parseReplay, type Replay } from '@/client/replay';
+import { EndPanel } from '@/scene/EndPanel';
 import { useVoice } from '@/voice/useVoice';
 import type { DebateConfig, ProviderId } from '@/types';
 
@@ -46,8 +47,11 @@ function ReplayRun({ replay }: { replay: Replay }) {
   const r = useReplay(replay, v.waitFor);
   v.config.current = r.scene.config;
   return (
-    <Stage scene={r.scene} defaultCamera="diretor"
-      controls={{ ...r, onStop: () => router.push('/'), onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }} />
+    <>
+      <Stage scene={r.scene} defaultCamera="diretor"
+        controls={{ ...r, onStop: () => router.push('/'), onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }} />
+      <EndPanel scene={r.scene} events={replay.events} onNew={() => router.push('/config')} />
+    </>
   );
 }
 
@@ -75,11 +79,14 @@ function Live() {
   }, [router, start]);
   if (!ready) return null;
   return (
-    <Stage
-      scene={d.scene}
-      defaultCamera="orbita"
-      controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
-        onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }}
-    />
+    <>
+      <Stage
+        scene={d.scene}
+        defaultCamera="orbita"
+        controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
+          onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }}
+      />
+      <EndPanel scene={d.scene} events={d.events} onNew={() => router.push('/config')} />
+    </>
   );
 }

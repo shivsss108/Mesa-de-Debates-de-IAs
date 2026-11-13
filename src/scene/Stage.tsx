@@ -17,8 +17,8 @@ import { typingTarget } from '@/scene/keys';
 
 const MODES: CameraMode[] = ['diretor', 'orbita', 'livre'];
 
-export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbita' }: {
-  scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode;
+export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbita', bare = false }: {
+  scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode; /** sem HUD nem transcrição (fundo da tela inicial) */ bare?: boolean;
 }) {
   const [mode, setMode] = useState<CameraMode>(defaultCamera);
   const [hovered, setHovered] = useState<string>();
@@ -72,8 +72,8 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
         <Cameras mode={mode} scene={scene} posOf={posOf} radius={radius} />
         {process.env.NODE_ENV === 'development' && <Stats />}
       </Canvas>
-      <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />
-      <Transcript scene={scene} />
+      {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}
+      {!bare && <Transcript scene={scene} />}
     </div>
   );
 }

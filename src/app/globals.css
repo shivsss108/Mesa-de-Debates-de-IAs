@@ -1,49 +1,26 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0b1f22;
+  --bg-2: #0f2a2e;
+  --panel: rgba(8, 26, 29, 0.82);
+  --line: rgba(232, 241, 241, 0.14);
+  --fg: #e8f1f1;
+  --muted: #94b3b5;
+  --accent: #d9953f;
+  --accent-2: #f0b45e;
+  --danger: #ff8a7a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html {
-  height: 100%;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
+html { height: 100%; color-scheme: dark; }
+html, body { max-width: 100vw; overflow-x: hidden; }
 
 body {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-}
+* { box-sizing: border-box; padding: 0; margin: 0; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
