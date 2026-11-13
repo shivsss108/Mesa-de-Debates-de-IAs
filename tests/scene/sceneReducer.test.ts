@@ -1,0 +1,61 @@
+import { describe, expect, it } from 'vitest';
+import { initialScene, sceneReducer } from '@/scene/sceneReducer';
+import type { DebateConfig, DebateEvent } from '@/types';
+
+const seat = (id: string) => ({
+  id, nome: id, provider: 'groq' as const, model: 'm',
+  temperamento: { presetId: 'x' }, expertise: { presetId: 'y' },
+});
+const config: DebateConfig = {
+  tema: 't', idioma: 'pt', maxTurns: 6,
+  moderador: { provider: 'groq', model: 'm', provocacao: 'media' },
+  seats: [seat('m1'), seat('m2')],
+};
+
+type Body = DebateEvent extends infer E ? (E extends unknown ? Omit<E, 'seq' | 't'> : never) : never;
+const seqd = (bodies: Body[]) => bodies.map((b, i) => ({ seq: i, t: i * 10, ...b }) as DebateEvent);
+
+describe('sceneReducer', () => {
+  it('dobra o passo feliz em cena', () => {
+    const events = seqd([
+      { type: 'debate_start', config },
+      { type: 'turn_start', speaker: 'moderador', addressedTo: 'm1' },
+      { type: 'token', speaker: 'moderador', text: 'Olá ' },
+      { type: 'token', speaker: 'moderador', text: 'm1' },
+      { type: 'turn_end', speaker: 'moderador', fullText: 'Olá m1' },
+      { type: 'turn_start', speaker: 'm1' },
+      { type: 'token', speaker: 'm1', text: 'Oi' },
+    ]);
+    let s = events.reduce(sceneReducer, initialScene);
+    expect(s.speaker).toBe('m1');
+    expect(s.bubble).toBe('Oi');
+    expect(Object.keys(s.members).sort()).toEqual(['m1', 'm2', 'moderador']);
+
+    const more = seqd([
+      { type: 'turn_end', speaker: 'm1', fullText: 'Oi' },
+      { type: 'emotion', member: 'm1', emotion: 'feliz' },
+      { type: 'gesture', member: 'm1', gesture: 'apontar' },
+      { type: 'hands', queue: [{ member: 'm2', urge: 0.9, reason: 'r' }] },
+      { type: 'debate_end', summary: 's', consensus: [], openPoints: [], verdict: 'v' },
+    ]);
+    s = more.reduce(sceneReducer, s);
+    expect(s.bubble).toBe('');
+    expect(s.transcript).toEqual([
+      { speaker: 'moderador', text: 'Olá m1' },
+      { speaker: 'm1', text: 'Oi' },
+    ]);
+    expect(s.memberTurns).toBe(1);
+    expect(s.members.m1.emotion).toBe('feliz');
+    expect(s.members.m1.gesture).toEqual({ name: 'apontar', at: 20 });
+    expect(s.members.m2.handUp).toBe(true);
+    expect(s.members.m1.handUp).toBe(false);
+    expect(s.ended?.verdict).toBe('v');
+  });
+
+  it('hands novas baixam mãos que saíram da fila', () => {
+    let s = seqd([{ type: 'debate_start', config }, { type: 'hands', queue: [{ member: 'm1', urge: 1, reason: '' }] }]).reduce(sceneReducer, initialScene);
+    expect(s.members.m1.handUp).toBe(true);
+    s = sceneReducer(s, { seq: 9, t: 9, type: 'hands', queue: [] });
+    expect(s.members.m1.handUp).toBe(false);
+  });
+});
