@@ -1,14 +1,17 @@
 export type ProviderId = 'groq' | 'nvidia' | 'openrouter' | 'google' | 'mistral' | 'cerebras';
-export type Emotion = 'neutro' | 'feliz' | 'raiva' | 'duvida' | 'surpresa' | 'tristeza' | 'desdem' | 'pensativo';
-export type Gesture =
-  | 'bater_na_mesa'
-  | 'apontar'
-  | 'bracos_cruzados'
-  | 'mao_levantada'
-  | 'maos_no_bolso'
-  | 'balancar_cabeca'
-  | 'dar_de_ombros'
-  | 'inclinar_para_frente';
+export const EMOTIONS = ['neutro', 'feliz', 'raiva', 'duvida', 'surpresa', 'tristeza', 'desdem', 'pensativo'] as const;
+export type Emotion = (typeof EMOTIONS)[number];
+export const GESTURES = [
+  'bater_na_mesa',
+  'apontar',
+  'bracos_cruzados',
+  'mao_levantada',
+  'maos_no_bolso',
+  'balancar_cabeca',
+  'dar_de_ombros',
+  'inclinar_para_frente',
+] as const;
+export type Gesture = (typeof GESTURES)[number];
 
 export type PersonaRef = { presetId: string } | { custom: string };
 
