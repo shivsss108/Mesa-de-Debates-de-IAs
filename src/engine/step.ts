@@ -1,0 +1,228 @@
+import type { ChatFn, ChatMessage } from '@/providers/client';
+import { PROVIDERS } from '@/providers/table';
+import { resolveKey } from '@/providers/catalog';
+import { resolveTemperamento } from '@/presets/temperamentos';
+import { MODERATOR_ID, offlineIds } from '@/types';
+import type { DebateConfig, DebateEvent, DebateState, ProviderId } from '@/types';
+import { parseTag, TagStreamSplitter, type ParsedTag } from './tags';
+import { computeHands } from './urge';
+import { buildClosingMessages, buildMemberMessages, buildModeratorMessages, buildSummaryMessages } from './prompts';
+import { parseClosing, parseModeratorDecision, resolveTarget, type ModeratorDecision } from './moderator';
+
+export interface StepDeps {
+  chat: ChatFn;
+  keys: Partial<Record<ProviderId, string>>;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  signal?: AbortSignal;
+}
+
+export const BACKOFF_MS = [1000, 2000, 4000];
+export const SUMMARY_EVERY = 5;
+const JSON_ONLY = 'Responda somente o JSON.';
+
+type Body = DebateEvent extends infer E ? (E extends DebateEvent ? Omit<E, 'seq' | 't'> : never) : never;
+
+class MissingKey extends Error {
+  constructor(readonly provider: ProviderId) {
+    super(`Sem chave de API para ${PROVIDERS[provider].nome}.`);
+  }
+}
+
+/**
+ * Um passo do debate: decisão do moderador + um turno de membro.
+ * Não muta `state`; devolve o novo estado. Abort (`deps.signal`) encerra sem emitir mais nada.
+ */
+export async function* runStep(
+  config: DebateConfig,
+  state: DebateState,
+  deps: StepDeps,
+  seqStart: number,
+): AsyncGenerator<DebateEvent, DebateState> {
+  const s = structuredClone(state);
+  let seq = seqStart;
+  try {
+    for await (const e of step(config, s, deps)) {
+      if (deps.signal?.aborted) return s;
+      yield { ...e, seq: seq++, t: deps.now() - s.startedAt } as DebateEvent;
+    }
+  } catch (e) {
+    if (isAbort(e, deps.signal)) return s;
+    throw e;
+  }
+  return s;
+}
+
+function isAbort(e: unknown, signal?: AbortSignal): boolean {
+  return !!signal?.aborted || (e instanceof Error && e.name === 'AbortError');
+}
+
+async function* step(config: DebateConfig, s: DebateState, deps: StepDeps): AsyncGenerator<Body> {
+  /** Erros que não são falha do provedor: sobem direto, sem retry. */
+  const fatal = (e: unknown) => e instanceof MissingKey || isAbort(e, deps.signal);
+
+  /** Rate gate por provedor (compartilhado entre assentos) antes de cada chamada; devolve a chave. */
+  async function gate(p: ProviderId): Promise<string> {
+    const key = resolveKey(p, deps.keys);
+    if (!key) throw new MissingKey(p);
+    const last = s.lastCallAt[p];
+    const wait = last === undefined ? 0 : PROVIDERS[p].minIntervalMs - (deps.now() - last);
+    if (wait > 0) await deps.sleep(wait);
+    s.lastCallAt[p] = deps.now();
+    return key;
+  }
+
+  /** Chamada não-streaming com backoff; lança após BACKOFF_MS.length falhas. */
+  async function collect(p: ProviderId, model: string, messages: ChatMessage[]): Promise<string> {
+    let last: unknown;
+    for (const backoff of BACKOFF_MS) {
+      try {
+        const apiKey = await gate(p);
+        let out = '';
+        for await (const c of deps.chat({ provider: p, model, messages, apiKey, signal: deps.signal })) out += c;
+        return out;
+      } catch (e) {
+        if (fatal(e)) throw e;
+        last = e;
+        await deps.sleep(backoff);
+      }
+    }
+    throw last;
+  }
+
+  /** JSON do moderador: 1 retry pedindo só o JSON; null se falhar. */
+  async function decide<T>(messages: ChatMessage[], parse: (raw: string) => T | null): Promise<T | null> {
+    const { provider, model } = config.moderador;
+    try {
+      const raw = await collect(provider, model, messages);
+      const retry = [...messages, { role: 'assistant' as const, content: raw }, { role: 'user' as const, content: JSON_ONLY }];
+      return parse(raw) ?? parse(await collect(provider, model, retry));
+    } catch (e) {
+      if (fatal(e)) throw e;
+      return null;
+    }
+  }
+
+  async function* closing(): AsyncGenerator<Body> {
+    const c = await decide(buildClosingMessages(config, s), parseClosing);
+    s.done = true;
+    yield c
+      ? { type: 'debate_end', ...c, summary: c.summary || s.summary }
+      : { type: 'debate_end', summary: s.summary, consensus: [], openPoints: [], verdict: '' };
+  }
+
+  try {
+    if (s.memberTurns === 0 && s.history.length === 0) yield { type: 'debate_start', config };
+    if (s.memberTurns >= config.maxTurns) return yield* closing();
+
+    // 1. Moderador
+    let decision: ModeratorDecision | null = await decide(buildModeratorMessages(config, s), parseModeratorDecision);
+    if (!decision) {
+      s.moderatorFailures++;
+      decision = { acao: 'passar_palavra', fala: '' };
+    }
+    if (decision.acao === 'encerrar') return yield* closing();
+    // 'provocar' segue como 'passar_palavra': a provocação está em `fala`
+    const m = resolveTarget(decision, config, s);
+    const fala = decision.fala.trim();
+    if (fala) {
+      yield { type: 'turn_start', speaker: MODERATOR_ID, addressedTo: m };
+      yield { type: 'token', speaker: MODERATOR_ID, text: fala };
+      yield { type: 'turn_end', speaker: MODERATOR_ID, fullText: fala };
+      s.history.push({ speaker: MODERATOR_ID, text: fala });
+    }
+
+    // 2. Membro
+    const seat = config.seats.find((x) => x.id === m)!;
+    const others = config.seats.filter((x) => x.id !== m).map((x) => x.id);
+    const address = fala ? `O Moderador se dirigiu a você: "${fala}"` : 'É a sua vez de falar.';
+    const messages = buildMemberMessages(config, s, seat, address);
+    const turnStart: Body = { type: 'turn_start', speaker: m, ...(fala ? { addressedTo: MODERATOR_ID } : {}) };
+    yield { type: 'status', member: m, state: 'pensando' };
+
+    let turn: ParsedTag | undefined;
+    for (let i = 0; i < BACKOFF_MS.length && !turn; i++) {
+      const splitter = new TagStreamSplitter();
+      let raw = '';
+      let started = false;
+      let errored = false;
+      try {
+        const apiKey = await gate(seat.provider);
+        for await (const chunk of deps.chat({ provider: seat.provider, model: seat.model, messages, apiKey, signal: deps.signal })) {
+          raw += chunk;
+          let out = splitter.push(chunk);
+          if (!started) {
+            out = out.trimStart();
+            if (!out) continue;
+            started = true;
+            yield turnStart;
+          }
+          yield { type: 'token', speaker: m, text: out };
+        }
+      } catch (e) {
+        if (fatal(e)) throw e;
+        errored = true;
+      }
+      const p = parseTag(raw, others);
+      // ponytail: stream que cai depois de já ter mostrado texto vira um turno truncado (evita turn_start sem turn_end)
+      if (p.text && (started || !errored)) {
+        // o splitter não tem flush: se ainda segurava um "[..." sem fechar, solta agora
+        if (!started) {
+          yield turnStart;
+          yield { type: 'token', speaker: m, text: p.text };
+        }
+        turn = p;
+      } else {
+        await deps.sleep(BACKOFF_MS[i]);
+      }
+    }
+
+    if (!turn) {
+      s.failures[m] = (s.failures[m] ?? 0) + 1;
+      s.offline[m] = s.memberTurns;
+      yield { type: 'status', member: m, state: 'sem_sinal' };
+      return;
+    }
+
+    yield { type: 'emotion', member: m, emotion: turn.emotion ?? resolveTemperamento(seat.temperamento).emocaoPadrao };
+    if (turn.gesture) yield { type: 'gesture', member: m, gesture: turn.gesture };
+    if (turn.stance !== undefined) {
+      s.stances[m] = turn.stance;
+      yield { type: 'stance', member: m, value: turn.stance };
+    }
+    yield { type: 'turn_end', speaker: m, fullText: turn.text };
+    yield { type: 'status', member: m, state: 'ok' };
+    s.history.push({ speaker: m, text: turn.text });
+    s.memberTurns++;
+    s.lastSpokeTurn[m] = s.memberTurns;
+    s.failures[m] = 0;
+
+    // 3. Mãos e resumo
+    s.hands = computeHands({
+      speaker: m,
+      target: turn.target,
+      seats: config.seats,
+      stances: s.stances,
+      lastSpokeTurn: s.lastSpokeTurn,
+      memberTurns: s.memberTurns,
+      offline: offlineIds(s),
+    });
+    yield { type: 'hands', queue: s.hands };
+
+    if (s.memberTurns % SUMMARY_EVERY === 0) {
+      try {
+        const text = (await collect(config.moderador.provider, config.moderador.model, buildSummaryMessages(config, s))).trim();
+        if (text) {
+          s.summary = text;
+          yield { type: 'summary_update', text };
+        }
+      } catch (e) {
+        if (fatal(e)) throw e; // resumo falhou: segue com o anterior
+      }
+    }
+  } catch (e) {
+    if (!(e instanceof MissingKey)) throw e;
+    s.done = true;
+    yield { type: 'error', message: e.message };
+  }
+}

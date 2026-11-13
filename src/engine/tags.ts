@@ -25,9 +25,12 @@ export function parseTag(raw: string, memberIds: string[]): ParsedTag {
     }
     const key = norm(field.slice(0, i));
     const val = field.slice(i + 1).trim();
-    if (key === 'alvo' && memberIds.includes(val)) out.target = val;
-    else if (key === 'posicao' && val !== '' && Number.isFinite(Number(val))) {
-      out.stance = Math.max(-1, Math.min(1, Number(val)));
+    if (key === 'alvo') {
+      const id = memberIds.find((m) => m.toLowerCase() === val.toLowerCase());
+      if (id) out.target = id;
+    } else if (key === 'posicao') {
+      const n = Number(val.replace(',', '.')); // pt-BR: "-0,7"
+      if (val !== '' && Number.isFinite(n)) out.stance = Math.max(-1, Math.min(1, n));
     }
   }
   return out;

@@ -26,6 +26,13 @@ describe('parseTag', () => {
     expect(parseTag('[feliz|posição:3] x', ids).stance).toBe(1);
     expect(parseTag('[feliz|posição:abc] x', ids).stance).toBeUndefined();
   });
+  it('accepts decimal comma in posição', () => {
+    expect(parseTag('[feliz|posição:-0,7] x', ids).stance).toBe(-0.7);
+  });
+  it('matches alvo case-insensitively, returning the canonical id', () => {
+    expect(parseTag('[feliz|alvo:M2] x', ['m1', 'm2']).target).toBe('m2');
+    expect(parseTag('[feliz|alvo:ana] x', ['Ana']).target).toBe('Ana');
+  });
   it('no tag returns trimmed text', () => {
     expect(parseTag('  olá mundo \n', ids)).toEqual({ text: 'olá mundo' });
   });

@@ -1,0 +1,288 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { runStep, BACKOFF_MS, SUMMARY_EVERY, type StepDeps } from '@/engine/step';
+import { createInitialState } from '@/engine/initialState';
+import type { ChatFn, ChatMessage } from '@/providers/client';
+import type { DebateConfig, DebateEvent, DebateState, Seat } from '@/types';
+
+const KEYS = { groq: 'gsk-SECRET-123', mistral: 'mi-SECRET-456' };
+
+const seat = (id: string, model: string, temperamento: string): Seat => ({
+  id, nome: id.toUpperCase(), provider: 'groq', model, temperamento: { presetId: temperamento }, expertise: { custom: '' },
+});
+const cfg: DebateConfig = {
+  tema: 'IA no trabalho', idioma: 'pt-BR', maxTurns: 20,
+  moderador: { provider: 'mistral', model: 'mod', provocacao: 'media' },
+  seats: [seat('m1', 'g1', 'cetico'), seat('m2', 'g2', 'explosivo')],
+};
+
+type Item = string | string[] | Error;
+/** Fila roteirizada por "provider:model"; registra as mensagens de cada chamada. */
+function fakeChat(script: Record<string, Item[]>) {
+  const calls: { route: string; messages: ChatMessage[]; apiKey: string }[] = [];
+  const chat: ChatFn = async function* (req) {
+    const route = `${req.provider}:${req.model}`;
+    calls.push({ route, messages: req.messages, apiKey: req.apiKey });
+    const item = script[route]?.shift();
+    if (item === undefined) throw new Error(`sem roteiro para ${route}`);
+    if (item instanceof Error) throw item;
+    for (const c of Array.isArray(item) ? item : [item]) yield c;
+  };
+  return { chat, calls };
+}
+
+function makeDeps(chat: ChatFn, over: Partial<StepDeps> = {}) {
+  const sleeps: number[] = [];
+  let clock = 1_000_000;
+  const deps: StepDeps = {
+    chat,
+    keys: KEYS,
+    // avança 10s a cada leitura: o rate gate nunca espera (salvo nos testes que trocam `now`)
+    now: () => (clock += 10_000),
+    sleep: async (ms) => void sleeps.push(ms),
+    ...over,
+  };
+  return { deps, sleeps };
+}
+
+async function run(config: DebateConfig, state: DebateState, deps: StepDeps, seqStart = 0) {
+  const events: DebateEvent[] = [];
+  const gen = runStep(config, state, deps, seqStart);
+  for (;;) {
+    const r = await gen.next();
+    if (r.done) return { events, state: r.value };
+    events.push(r.value);
+  }
+}
+
+const decision = (o: object) => JSON.stringify(o);
+const types = (evs: DebateEvent[]) => evs.map((e) => e.type);
+const fresh = () => createInitialState(cfg, 1_000_000);
+const withTurns = (n: number, over: Partial<DebateState> = {}): DebateState => ({
+  ...fresh(),
+  memberTurns: n,
+  history: [{ speaker: 'm2', text: 'algo' }],
+  ...over,
+});
+
+beforeEach(() => {
+  vi.stubEnv('GROQ_API_KEY', '');
+  vi.stubEnv('MISTRAL_API_KEY', '');
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe('runStep', () => {
+  it('passo feliz: ordem dos eventos, seq, t e estado', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: 'M1, comece.' })],
+      'groq:g1': [['[duvida|apontar|alvo:M2|posição:-0,5] ', 'Não ', 'concordo.']],
+    });
+    const { deps } = makeDeps(chat);
+    const { events, state } = await run(cfg, fresh(), deps, 10);
+    expect(types(events)).toEqual([
+      'debate_start', 'turn_start', 'token', 'turn_end',
+      'status', 'turn_start', 'token', 'token', 'emotion', 'gesture', 'stance', 'turn_end', 'status', 'hands',
+    ]);
+    expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => 10 + i));
+    expect(events.every((e) => e.t > 0)).toBe(true);
+    expect(events[1]).toMatchObject({ type: 'turn_start', speaker: 'moderador', addressedTo: 'm1' });
+    expect(events[2]).toMatchObject({ type: 'token', speaker: 'moderador', text: 'M1, comece.' });
+    expect(events[4]).toMatchObject({ type: 'status', member: 'm1', state: 'pensando' });
+    expect(events[5]).toMatchObject({ type: 'turn_start', speaker: 'm1', addressedTo: 'moderador' });
+    const tokens = events.filter((e) => e.type === 'token' && e.speaker === 'm1').map((e) => (e as { text: string }).text);
+    expect(tokens.join('')).toBe('Não concordo.');
+    expect(events[8]).toMatchObject({ emotion: 'duvida' });
+    expect(events[9]).toMatchObject({ gesture: 'apontar' });
+    expect(events[10]).toMatchObject({ member: 'm1', value: -0.5 });
+    expect(events[11]).toMatchObject({ type: 'turn_end', speaker: 'm1', fullText: 'Não concordo.' });
+    expect(events[12]).toMatchObject({ state: 'ok' });
+    expect(events[13]).toMatchObject({ type: 'hands', queue: [{ member: 'm2' }] });
+    expect(state.memberTurns).toBe(1);
+    expect(state.history).toEqual([
+      { speaker: 'moderador', text: 'M1, comece.' },
+      { speaker: 'm1', text: 'Não concordo.' },
+    ]);
+    expect(state.stances.m1).toBe(-0.5);
+    expect(state.lastSpokeTurn.m1).toBe(1);
+    expect(state.failures.m1).toBe(0);
+    expect(state.hands).toEqual((events[13] as { queue: unknown }).queue);
+    expect(state.done).toBe(false);
+  });
+
+  it('não muta o estado de entrada', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })], 'groq:g1': ['oi'] });
+    const s0 = fresh();
+    const copy = structuredClone(s0);
+    await run(cfg, s0, makeDeps(chat).deps);
+    expect(s0).toEqual(copy);
+  });
+
+  it('sem tag → emoção padrão do temperamento, sem gesture/stance; sem fala do moderador', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': ['  Só texto.'],
+    });
+    const { events } = await run(cfg, fresh(), makeDeps(chat).deps);
+    expect(types(events)).toEqual(['debate_start', 'status', 'turn_start', 'token', 'emotion', 'turn_end', 'status', 'hands']);
+    expect(events[2]).not.toHaveProperty('addressedTo');
+    expect(events[3]).toMatchObject({ text: 'Só texto.' });
+    expect(events[4]).toMatchObject({ emotion: 'duvida' });
+  });
+
+  it('resposta só com a tag conta como falha e é refeita', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': ['[feliz]', '[feliz] Agora sim.'],
+    });
+    const { deps, sleeps } = makeDeps(chat);
+    const { events, state } = await run(cfg, fresh(), deps);
+    expect(sleeps).toEqual([BACKOFF_MS[0]]);
+    expect(events.filter((e) => e.type === 'turn_start')).toHaveLength(1);
+    expect(events.find((e) => e.type === 'turn_end')).toMatchObject({ fullText: 'Agora sim.' });
+    expect(state.memberTurns).toBe(1);
+  });
+
+  it('3 falhas → sem_sinal, offline, backoff 1s/2s/4s, sem turn_start', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': [new Error('HTTP 429'), '[feliz]', '   '],
+    });
+    const { deps, sleeps } = makeDeps(chat);
+    const { events, state } = await run(cfg, withTurns(4), deps);
+    expect(sleeps).toEqual([1000, 2000, 4000]);
+    expect(events.some((e) => e.type === 'turn_start')).toBe(false);
+    expect(events.at(-1)).toMatchObject({ type: 'status', member: 'm1', state: 'sem_sinal' });
+    expect(state.offline).toEqual({ m1: 4 });
+    expect(state.failures.m1).toBe(1);
+    expect(state.memberTurns).toBe(4);
+  });
+
+  it('moderador devolve lixo duas vezes → fallback de rodízio, ainda há turno de membro', async () => {
+    const { chat, calls } = fakeChat({ 'mistral:mod': ['lixo', 'mais lixo {'], 'groq:g1': ['[feliz] Oi.'] });
+    const { events, state } = await run(cfg, fresh(), makeDeps(chat).deps);
+    expect(state.moderatorFailures).toBe(1);
+    expect(calls[1].messages.at(-1)).toEqual({ role: 'user', content: 'Responda somente o JSON.' });
+    expect(events.some((e) => e.type === 'turn_start' && e.speaker === 'moderador')).toBe(false);
+    expect(events.find((e) => e.type === 'turn_end')).toMatchObject({ speaker: 'm1', fullText: 'Oi.' });
+  });
+
+  it('moderador com erro 3× → fallback com backoff', async () => {
+    const err = () => new Error('HTTP 500');
+    const { chat } = fakeChat({ 'mistral:mod': [err(), err(), err()], 'groq:g1': ['Oi.'] });
+    const { deps, sleeps } = makeDeps(chat);
+    const { state } = await run(cfg, fresh(), deps);
+    expect(sleeps).toEqual([1000, 2000, 4000]);
+    expect(state.moderatorFailures).toBe(1);
+    expect(state.memberTurns).toBe(1);
+  });
+
+  it("acao 'encerrar' → debate_end e done", async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [
+        decision({ acao: 'encerrar', fala: '' }),
+        decision({ summary: 'S', consensus: ['a'], openPoints: ['b'], verdict: 'V' }),
+      ],
+    });
+    const { events, state } = await run(cfg, withTurns(3), makeDeps(chat).deps);
+    expect(types(events)).toEqual(['debate_end']);
+    expect(events[0]).toMatchObject({ summary: 'S', consensus: ['a'], openPoints: ['b'], verdict: 'V' });
+    expect(state.done).toBe(true);
+  });
+
+  it('memberTurns === maxTurns → só fechamento (fallback após lixo 2×)', async () => {
+    const { chat, calls } = fakeChat({ 'mistral:mod': ['lixo', 'lixo'] });
+    const { events, state } = await run(cfg, withTurns(20, { summary: 'resumo atual' }), makeDeps(chat).deps);
+    expect(calls).toHaveLength(2);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: 'debate_end', summary: 'resumo atual', consensus: [], openPoints: [], verdict: '' });
+    expect(state.done).toBe(true);
+  });
+
+  it(`turno ${SUMMARY_EVERY} → summary_update; 'provocar' age como passar_palavra`, async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'provocar', para: 'm2', fala: 'M2, cadê você?' }), 'Novo resumo.'],
+      'groq:g2': ['[raiva] Aqui!'],
+    });
+    const { events, state } = await run(cfg, withTurns(SUMMARY_EVERY - 1), makeDeps(chat).deps);
+    expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm2')).toMatchObject({ fullText: 'Aqui!' });
+    expect(events.at(-1)).toEqual(expect.objectContaining({ type: 'summary_update', text: 'Novo resumo.' }));
+    expect(state.summary).toBe('Novo resumo.');
+  });
+
+  it('rate gate por provedor, compartilhado entre assentos', async () => {
+    let clock = 5_000;
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' }), decision({ acao: 'passar_palavra', para: 'm2', fala: '' })],
+      'groq:g1': ['Um.'],
+      'groq:g2': ['Dois.'],
+    });
+    const { deps, sleeps } = makeDeps(chat, { now: () => clock });
+    const r1 = await run(cfg, createInitialState(cfg, 0), deps);
+    expect(sleeps).toEqual([]);
+    clock += 500;
+    await run(cfg, r1.state, deps);
+    // mistral: 1000 - 500; groq (m1 → m2): 2000 - 500
+    expect(sleeps).toEqual([500, 1500]);
+  });
+
+  it('sem chave → error com o nome do provedor e done', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })] });
+    const { events, state } = await run(cfg, fresh(), makeDeps(chat, { keys: { mistral: KEYS.mistral } }).deps);
+    const err = events.find((e) => e.type === 'error');
+    expect(err && 'message' in err && err.message).toContain('Groq');
+    expect(events.at(-1)).toBe(err);
+    expect(state.done).toBe(true);
+  });
+
+  it('eventos nunca contêm a chave', async () => {
+    const { chat, calls } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: 'Fale.' })],
+      'groq:g1': [new Error('HTTP 401'), '[feliz] Ok.'],
+    });
+    const a = await run(cfg, fresh(), makeDeps(chat).deps);
+    const b = await run(cfg, fresh(), makeDeps(fakeChat({}).chat, { keys: { groq: KEYS.groq } }).deps);
+    expect(calls.map((c) => c.apiKey)).toEqual([KEYS.mistral, KEYS.groq, KEYS.groq]);
+    const all = JSON.stringify([...a.events, ...b.events]);
+    expect(all).not.toContain(KEYS.groq);
+    expect(all).not.toContain(KEYS.mistral);
+  });
+
+  it('stream termina com [ sem fechar → texto sai como token final', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': [['[sem ', 'fechar']],
+    });
+    const { events } = await run(cfg, fresh(), makeDeps(chat).deps);
+    const tokens = events.filter((e) => e.type === 'token').map((e) => (e as { text: string }).text);
+    expect(tokens).toEqual(['[sem fechar']);
+    expect(events.find((e) => e.type === 'turn_end')).toMatchObject({ fullText: '[sem fechar' });
+  });
+
+  it('abort no meio do passo: para sem emitir mais nada e não conta como falha', async () => {
+    const ac = new AbortController();
+    const chat: ChatFn = async function* (req) {
+      if (req.provider === 'mistral') {
+        yield decision({ acao: 'passar_palavra', para: 'm1', fala: 'Vai.' });
+        return;
+      }
+      yield '[feliz] Come';
+      ac.abort();
+      throw new DOMException('aborted', 'AbortError');
+    };
+    const { deps, sleeps } = makeDeps(chat, { signal: ac.signal });
+    const { events, state } = await run(cfg, fresh(), deps);
+    expect(types(events)).toEqual(['debate_start', 'turn_start', 'token', 'turn_end', 'status', 'turn_start', 'token']);
+    expect(sleeps).toEqual([]);
+    expect(state.failures.m1 ?? 0).toBe(0);
+    expect(state.offline).toEqual({});
+    expect(state.memberTurns).toBe(0);
+  });
+});
+
+describe('createInitialState', () => {
+  it('estado zerado', () => {
+    expect(createInitialState(cfg, 42)).toMatchObject({
+      startedAt: 42, memberTurns: 0, summary: '', history: [], offline: {}, hands: [], lastCallAt: {}, done: false,
+      moderatorFailures: 0,
+    });
+  });
+});
