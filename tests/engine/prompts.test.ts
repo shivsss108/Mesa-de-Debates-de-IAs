@@ -33,6 +33,14 @@ describe('buildMemberMessages', () => {
     expect(t).toContain(resolveTemperamento({ presetId: 'explosivo' }).promptSnippet);
     expect(t).toContain(resolveExpertise({ presetId: 'cientista' }).promptSnippet);
   });
+  it('alvo lista Nome (id) dos outros e não oferece o próprio id', () => {
+    const c = mk();
+    const sys = buildMemberMessages(c, st(), c.seats[0], 'a')[0].content;
+    expect(sys).toContain('Nomem2 (m2)');
+    expect(sys.match(/Nomem1 \(m1\)/g)).toHaveLength(1); // só na linha "Você é"
+    expect(sys).not.toContain('alvo:m1');
+    expect(sys).toContain('Você é Nomem1 (m1)');
+  });
   it('envia só as 6 últimas falas', () => {
     const c = mk();
     const history = Array.from({ length: 10 }, (_, i) => ({ speaker: 'm1', text: `fala-${i}-x` }));

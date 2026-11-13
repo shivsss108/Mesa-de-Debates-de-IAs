@@ -23,18 +23,19 @@ function historyLines(config: DebateConfig, state: DebateState, n: number): stri
 }
 
 export function buildMemberMessages(config: DebateConfig, state: DebateState, seat: Seat, address: string): ChatMessage[] {
-  const ids = config.seats.map((s) => s.id).join(', ');
+  const others = config.seats.filter((s) => s.id !== seat.id);
+  const ids = others.map((s) => `${s.nome} (${s.id})`).join(', ');
   const system = [
-    `Você é ${seat.nome}, participante de uma mesa de debate. Responda sempre em ${config.idioma}.`,
+    `Você é ${seat.nome} (${seat.id}), participante de uma mesa de debate. Responda sempre em ${config.idioma}.`,
     'Regras:',
     `- Fale no máximo ${MEMBER_WORDS} palavras.`,
     '- Responda a quem foi citado ou a quem falou por último; não repita o que já foi dito.',
     '- Comece a resposta com a tag exata: [emoção|gesto|alvo:<id>|posição:<número>]',
     `  emoção: uma de ${EMOTIONS.join(', ')}`,
     `  gesto: um de ${GESTURES.join(', ')}`,
-    `  alvo: um id entre ${ids}, ou "ninguem"`,
+    `  alvo: o id (não o nome) de um destes membros: ${ids}; ou "ninguem". Nunca use o seu próprio id.`,
     '  posição: número de -1 (totalmente contra) a 1 (totalmente a favor), com ponto decimal (ex.: -0.7)',
-    '  Exemplo: [duvida|apontar|alvo:' + (config.seats[0]?.id ?? 'ninguem') + '|posição:-0.7] Seu texto aqui.',
+    '  Exemplo: [duvida|apontar|alvo:' + (others[0]?.id ?? 'ninguem') + '|posição:-0.7] Seu texto aqui.',
     resolveExpertise(seat.expertise).promptSnippet,
     resolveTemperamento(seat.temperamento).promptSnippet,
   ]
