@@ -56,6 +56,7 @@ export default function ConfigPage() {
   const [onlyFree, setOnlyFree] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
+  const [turnsText, setTurnsText] = useState<string>();
   const modTouched = useRef(false);
 
   useEffect(() => {
@@ -168,8 +169,13 @@ export default function ConfigPage() {
             </label>
             <label className={s.field}>
               Turnos de membros (6–60)
-              <input className={s.input} type="number" min={6} max={60} value={config.maxTurns}
-                onChange={(e) => update((c) => ({ ...c, maxTurns: Math.round(Number(e.target.value)) }))} />
+              <input className={s.input} type="number" min={6} max={60} value={turnsText ?? (Number.isNaN(config.maxTurns) ? '' : String(config.maxTurns))}
+                onChange={(e) => {
+                  setTurnsText(e.target.value);
+                  // vazio vira NaN: validateConfig acusa e o botão fica desabilitado
+                  update((c) => ({ ...c, maxTurns: e.target.value === '' ? NaN : Math.round(Number(e.target.value)) }));
+                }}
+                onBlur={() => setTurnsText(undefined)} />
             </label>
           </div>
           <div className={s.chips} role="group" aria-label="Sugestões de tema">

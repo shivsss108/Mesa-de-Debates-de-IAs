@@ -10,26 +10,26 @@ import styles from './page.module.css';
 const Stage = dynamic(() => import('@/scene/Stage').then((m) => m.Stage), { ssr: false });
 const noop = () => {};
 
-function DemoLoop({ replay, onEnd }: { replay: Replay; onEnd: () => void }) {
+function DemoLoop({ replay }: { replay: Replay }) {
   const r = useReplay(replay);
+  const { restart } = r;
   const ended = !!r.scene.ended;
   useEffect(() => {
     if (!ended) return;
-    const t = setTimeout(onEnd, 6000);
+    const t = setTimeout(restart, 6000);
     return () => clearTimeout(t);
-  }, [ended, onEnd]);
+  }, [ended, restart]);
   return <Stage bare scene={r.scene} defaultCamera="diretor" controls={{ pause: noop, speed: 1, setSpeed: noop, onStop: noop }} />;
 }
 
 export default function Home() {
   const [replay, setReplay] = useState<Replay>();
-  const [round, setRound] = useState(0);
   useEffect(() => {
     import('@/replays/demo-1.json').then((m) => setReplay(parseReplay(m.default))).catch(() => {});
   }, []);
   return (
     <main className={styles.root}>
-      {replay && <DemoLoop key={round} replay={replay} onEnd={() => setRound((n) => n + 1)} />}
+      {replay && <DemoLoop replay={replay} />}
       <div className={styles.veil} />
       <div className={styles.content}>
         <Mascote size={72} />

@@ -114,6 +114,8 @@ export function useReplay(replay: Replay, waitFor?: (e: DebateEvent) => Promise<
   const [scene, dispatch] = useReducer(sceneReducer, initialScene);
   const [speed, setSpeedState] = useState<number>(1);
   const speedRef = useRef(1);
+  const [run, setRun] = useState(0);
+  const restart = useCallback(() => setRun((n) => n + 1), []);
   const paused = useRef(false);
   const waitRef = useRef(waitFor);
   waitRef.current = waitFor;
@@ -123,7 +125,7 @@ export function useReplay(replay: Replay, waitFor?: (e: DebateEvent) => Promise<
     const c = new AbortController();
     void playReplay(replay, dispatch, { speed: () => speedRef.current, paused: () => paused.current, signal: c.signal, waitFor: (e) => waitRef.current?.(e) ?? Promise.resolve() });
     return () => c.abort();
-  }, [replay]);
+  }, [replay, run]);
 
-  return { scene, pause: (p: boolean) => (paused.current = p), speed, setSpeed: (n: 1 | 1.5 | 2) => setSpeedState(n) };
+  return { scene, restart, pause: (p: boolean) => (paused.current = p), speed, setSpeed: (n: 1 | 1.5 | 2) => setSpeedState(n) };
 }

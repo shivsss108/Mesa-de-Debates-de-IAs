@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { MODERATOR_ID } from '@/types';
@@ -11,7 +11,7 @@ import { Room, roomSize } from '@/scene/Room';
 import { Table } from '@/scene/Table';
 import { Cameras, type CameraMode } from '@/scene/Cameras';
 import { Hud, type StageControls } from '@/scene/Hud';
-import { SpeechBubble } from '@/scene/SpeechBubble';
+import { BubbleAnchor, SpeechBubble } from '@/scene/SpeechBubble';
 import { Transcript } from '@/scene/Transcript';
 import { typingTarget } from '@/scene/keys';
 
@@ -21,6 +21,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
   scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode; /** sem HUD nem transcrição (fundo da tela inicial) */ bare?: boolean;
 }) {
   const [mode, setMode] = useState<CameraMode>(defaultCamera);
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<string>();
   const cycle = () => setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
 
@@ -67,11 +68,12 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
           );
         })}
         {scene.speaker && speakerPos && (
-          <SpeechBubble position={[speakerPos[0], 2.3, speakerPos[2]]} text={scene.bubble} />
+          <BubbleAnchor position={[speakerPos[0], 2.3, speakerPos[2]]} target={bubbleRef} />
         )}
         <Cameras mode={mode} scene={scene} posOf={posOf} radius={radius} />
         {process.env.NODE_ENV === 'development' && <Stats />}
       </Canvas>
+      {!bare && <SpeechBubble text={scene.bubble} anchorRef={bubbleRef} />}
       {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}
       {!bare && <Transcript scene={scene} />}
     </div>
