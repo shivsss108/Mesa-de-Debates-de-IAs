@@ -29,7 +29,7 @@ export function ModelPicker({ label, provider, model, models, onChange }: {
       <label className={s.field} htmlFor={mid}>
         {label}: modelo
         <select id={mid} className={s.select} value={model} onChange={(e) => onChange(provider, e.target.value)}>
-          <option value="">{opts.length ? 'Escolha um modelo…' : 'Carregue os modelos'}</option>
+          <option value="">{opts.length ? 'Escolha um modelo…' : 'Cole a chave deste provedor'}</option>
           {opts.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </label>

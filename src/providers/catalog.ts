@@ -1,5 +1,6 @@
 import type { ProviderId } from '@/types';
 import { PROVIDERS } from './table';
+import { isDebateModel } from './models';
 
 export interface CatalogModel { provider: ProviderId; id: string; free: boolean }
 type Keys = Partial<Record<ProviderId, string>>;
@@ -51,7 +52,7 @@ export async function getCatalog(
           return;
         }
       }
-      for (const id of hit.ids) models.push({ provider: p, id, free: PROVIDERS[p].isFree(id) });
+      for (const id of hit.ids) if (isDebateModel(id)) models.push({ provider: p, id, free: PROVIDERS[p].isFree(id) });
     }),
   );
   return { models, errors };

@@ -59,3 +59,9 @@ describe('sceneReducer', () => {
     expect(s.members.m1.handUp).toBe(false);
   });
 });
+describe('status com motivo', () => {
+  it('sem_sinal com reason aparece na transcrição', () => {
+    const s = sceneReducer(initialScene, { seq: 0, t: 1, type: 'status', member: 'm1', state: 'sem_sinal', reason: 'resposta vazia do modelo' });
+    expect(s.transcript.at(-1)).toEqual({ speaker: 'm1', text: '(não respondeu: resposta vazia do modelo)' });
+  });
+});

@@ -9,6 +9,7 @@ import type { DebateConfig, ProviderId, Seat } from '@/types';
 import { Mascote } from '../Mascote';
 import { ModelPicker, SeatCard } from './SeatCard';
 import { validateConfig } from './validateConfig';
+import { bestOf, randomModels, variedBest } from './assignModels';
 import s from './config.module.css';
 
 type Keys = Partial<Record<ProviderId, string>>;
@@ -80,6 +81,36 @@ export default function ConfigPage() {
       return { ...c, seats, moderador };
     });
 
+  const loadModels = useCallback(async (k: Keys) => {
+    setLoading(true);
+    setLoadErrors([]);
+    try {
+      const res = await fetch('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys: k }) });
+      const j = (await res.json()) as { models: CatalogModel[]; errors: { provider: ProviderId; message: string }[] };
+      setModels(j.models);
+      setLoadErrors(j.errors.map((e) => `${PROVIDERS[e.provider].nome}: ${e.message}`));
+      // o catálogo já vem só com modelos que servem para debate: troca pelo melhor do provedor
+      // o que estiver vazio ou não estiver mais na lista (ex.: um modelo de voz escolhido antes)
+      const ids = new Set(j.models.map((m) => `${m.provider}:${m.id}`));
+      const fix = <T extends { provider: ProviderId; model: string }>(x: T): T =>
+        ids.has(`${x.provider}:${x.model}`) ? x : { ...x, model: bestOf(j.models, x.provider)?.model ?? '' };
+      update((c) => ({ ...c, seats: c.seats.map(fix), moderador: fix(c.moderador) }));
+    } catch {
+      setLoadErrors(['Não foi possível carregar os modelos.']);
+    } finally {
+      setLoading(false);
+    }
+  }, [update]);
+
+  // carrega os modelos sozinho quando há chave (sem precisar clicar), com pausa para não chamar a cada tecla
+  const keysSig = JSON.stringify(keys);
+  useEffect(() => {
+    const k = JSON.parse(keysSig) as Keys;
+    if (!Object.values(k).some((v) => v?.trim()) && !env.length) return;
+    const t = setTimeout(() => void loadModels(k), 700);
+    return () => clearTimeout(t);
+  }, [keysSig, env.length, loadModels]);
+
   if (!config) return null;
 
   const used = [...new Set<ProviderId>([config.moderador.provider, ...config.seats.map((x) => x.provider)])];
@@ -90,26 +121,9 @@ export default function ConfigPage() {
     writeSession('mesa:keys', next);
   };
 
-  const loadModels = async () => {
-    setLoading(true);
-    setLoadErrors([]);
-    try {
-      const res = await fetch('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys }) });
-      const j = (await res.json()) as { models: CatalogModel[]; errors: { provider: ProviderId; message: string }[] };
-      setModels(j.models);
-      setLoadErrors(j.errors.map((e) => `${PROVIDERS[e.provider].nome}: ${e.message}`));
-      // preenche com o primeiro modelo disponível o que ainda está vazio
-      const first = (p: ProviderId) => (j.models.find((m) => m.provider === p && (!onlyFree || m.free)) ?? j.models.find((m) => m.provider === p))?.id ?? '';
-      update((c) => ({
-        ...c,
-        seats: c.seats.map((x) => (x.model ? x : { ...x, model: first(x.provider) })),
-        moderador: c.moderador.model ? c.moderador : { ...c.moderador, model: first(c.moderador.provider) },
-      }));
-    } catch {
-      setLoadErrors(['Não foi possível carregar os modelos.']);
-    } finally {
-      setLoading(false);
-    }
+  const assign = (fn: (c: DebateConfig, m: CatalogModel[]) => DebateConfig) => {
+    modTouched.current = true; // o moderador recebeu um modelo escolhido de propósito
+    update((c) => fn(c, shown));
   };
 
   const setCount = (n: number) =>
@@ -210,6 +224,9 @@ export default function ConfigPage() {
               Só gratuitos
             </label>
             <button type="button" className={s.btn} onClick={() => setSeats((x) => randomizePersonalities(x))}>Aleatorizar personalidades</button>
+            <button type="button" className={s.btn} disabled={!shown.length} onClick={() => assign(variedBest)}
+              title="Os modelos mais fortes disponíveis, alternando provedores">Variar melhores modelos</button>
+            <button type="button" className={s.btn} disabled={!shown.length} onClick={() => assign(randomModels)}>Aleatorizar modelos</button>
             <button type="button" className={s.btn} onClick={sameModel}>Mesmo modelo para todos</button>
             <label className={`${s.check} ${s.btn}`} style={{ marginLeft: 'auto' }}>
               Membros
@@ -229,11 +246,12 @@ export default function ConfigPage() {
         <section className={s.block} aria-labelledby="h-keys">
           <h2 id="h-keys">Chaves de API</h2>
           <p className={s.note} style={{ marginBottom: 12 }}>Ficam só nesta aba do navegador (sessionStorage) e são enviadas apenas para chamar o provedor.</p>
+          <p className={s.note} style={{ marginBottom: 12 }}>Pode preencher vários: cada assento escolhe o seu provedor. Só os provedores em uso são obrigatórios.</p>
           <div className={s.grid}>
-            {used.map((p) => (
+            {(Object.keys(PROVIDERS) as ProviderId[]).map((p) => (
               <div key={p} className={s.keyRow}>
                 <label className={s.field}>
-                  Chave {PROVIDERS[p].nome}
+                  Chave {PROVIDERS[p].nome}{used.includes(p) ? ' (em uso)' : ''}
                   <input className={s.input} type="password" autoComplete="off" value={keys[p] ?? ''}
                     placeholder={env.includes(p) ? 'Usando a chave do servidor' : 'Cole sua chave'} onChange={(e) => setKey(p, e.target.value)} />
                 </label>
@@ -242,7 +260,7 @@ export default function ConfigPage() {
             ))}
           </div>
           <div className={s.toolbar} style={{ marginTop: 14, marginBottom: 0 }}>
-            <button type="button" className={s.btn} onClick={loadModels} disabled={loading}>{loading ? 'Carregando…' : 'Carregar modelos'}</button>
+            <button type="button" className={s.btn} onClick={() => void loadModels(keys)} disabled={loading}>{loading ? 'Carregando…' : 'Recarregar modelos'}</button>
             {models.length > 0 && <span className={s.note}>{shown.length} modelos disponíveis</span>}
           </div>
           {loadErrors.map((m) => <p key={m} role="alert" className={s.err}>{m}</p>)}

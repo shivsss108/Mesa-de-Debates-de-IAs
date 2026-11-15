@@ -115,10 +115,39 @@ describe('runStep', () => {
     expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => 10 + i));
   });
 
-  it('maxTokens: 300 no membro, 400 no moderador', async () => {
+  it('maxTokens: folga para modelos de raciocínio (1500)', async () => {
     const { chat, calls } = fakeChat({ 'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })], 'groq:g1': ['Oi.'] });
     await run(cfg, fresh(), makeDeps(chat).deps);
-    expect(calls.map((c) => [c.route, c.maxTokens])).toEqual([['mistral:mod', 400], ['groq:g1', 300]]);
+    expect(calls.map((c) => [c.route, c.maxTokens])).toEqual([['mistral:mod', 1500], ['groq:g1', 1500]]);
+  });
+
+  it('<think> do membro não vai para o balão nem para o texto final', async () => {
+    const { chat } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': [['<think>vou ', 'discordar</think>', '[raiva] ', 'Não!']],
+    });
+    const { events } = await run(cfg, fresh(), makeDeps(chat).deps);
+    const tokens = events.filter((e) => e.type === 'token' && e.speaker === 'm1').map((e) => (e as { text: string }).text);
+    expect(tokens.join('')).toBe('Não!');
+    expect(events.find((e) => e.type === 'emotion')).toMatchObject({ emotion: 'raiva' });
+  });
+
+  it('erro 400 (modelo que não conversa) → sem retry; sem_sinal traz o motivo', async () => {
+    const { chat, calls } = fakeChat({
+      'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })],
+      'groq:g1': [new ProviderError('HTTP 400: model does not support chat', 400), 'nunca'],
+    });
+    const { deps, sleeps } = makeDeps(chat);
+    const { events } = await run(cfg, fresh(), deps);
+    expect(calls.filter((c) => c.route === 'groq:g1')).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+    expect(events.find((e) => e.type === 'status' && e.state === 'sem_sinal')).toMatchObject({ reason: 'HTTP 400: model does not support chat' });
+  });
+
+  it('resposta vazia 3× → sem_sinal com motivo "resposta vazia do modelo"', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: '' })], 'groq:g1': ['', '', ''] });
+    const { events } = await run(cfg, fresh(), makeDeps(chat).deps);
+    expect(events.find((e) => e.type === 'status' && e.state === 'sem_sinal')).toMatchObject({ reason: 'resposta vazia do modelo' });
   });
 
   it('401 num membro → error com o nome do provedor e done, sem retry nem backoff', async () => {

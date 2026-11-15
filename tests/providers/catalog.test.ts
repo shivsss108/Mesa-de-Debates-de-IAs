@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCatalog, resetCatalogCache, resolveKey } from '@/providers/catalog';
+import { isDebateModel as isChatModel } from '@/providers/models';
 
 beforeEach(() => {
   resetCatalogCache();
@@ -58,5 +59,20 @@ describe('getCatalog', () => {
     t += 2 * 60_000;
     await getCatalog({ groq: 'k' }, fetchModels, now);
     expect(fetchModels).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('isChatModel', () => {
+  it('esconde modelos de voz, classificadores e agentes; mantém os de conversa', () => {
+    for (const id of ['canopylabs/orpheus-arabic-saudi', 'openai/gpt-oss-safeguard-20b', 'meta-llama/llama-guard-4-12b', 'whisper-large-v3', 'playai-tts', 'groq/compound', 'nvidia/nv-embedqa-e5-v5'])
+      expect(isChatModel(id), id).toBe(false);
+    for (const id of ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'qwen/qwen3-32b', 'meta/llama-3.3-70b-instruct', 'moonshotai/kimi-k2-instruct'])
+      expect(isChatModel(id), id).toBe(true);
+  });
+
+  it('getCatalog não lista modelos que não conversam', async () => {
+    resetCatalogCache();
+    const { models } = await getCatalog({ groq: 'k' }, async () => ['llama-3.3-70b-versatile', 'playai-tts']);
+    expect(models.map((m) => m.id)).toEqual(['llama-3.3-70b-versatile']);
   });
 });

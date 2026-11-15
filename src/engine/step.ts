@@ -19,8 +19,9 @@ export interface StepDeps {
 
 export const BACKOFF_MS = [1000, 2000, 4000];
 export const SUMMARY_EVERY = 5;
-export const MEMBER_MAX_TOKENS = 300;
-export const MODERATOR_MAX_TOKENS = 400;
+// modelos de raciocínio (gpt-oss, qwen3, deepseek-r1) gastam centenas de tokens pensando antes de responder
+export const MEMBER_MAX_TOKENS = 1500;
+export const MODERATOR_MAX_TOKENS = 1500;
 const JSON_ONLY = 'Responda somente o JSON.';
 
 type Body = DebateEvent extends infer E ? (E extends DebateEvent ? Omit<E, 'seq' | 't'> : never) : never;
@@ -29,6 +30,19 @@ type Body = DebateEvent extends infer E ? (E extends DebateEvent ? Omit<E, 'seq'
 class KeyError extends Error {}
 
 /** ProviderError 401/403 vira KeyError com o nome do provedor; o resto passa intacto. */
+/** Texto depois de um bloco `<think>` inicial (qwen3, deepseek-r1); `null` enquanto o modelo ainda pensa. */
+export function afterThink(raw: string): string | null {
+  const t = raw.trimStart();
+  if (!t.startsWith('<think>')) return raw;
+  const end = t.indexOf('</think>');
+  return end < 0 ? null : t.slice(end + '</think>'.length);
+}
+
+/** 400/404/422: o modelo não aceita este pedido (ex.: modelo de áudio); tentar de novo não muda nada. */
+function isPermanent(e: unknown): boolean {
+  return e instanceof ProviderError && (e.status === 400 || e.status === 404 || e.status === 422);
+}
+
 function asKeyError(p: ProviderId, e: unknown): unknown {
   return e instanceof ProviderError && (e.status === 401 || e.status === 403)
     ? new KeyError(`Chave inválida para ${PROVIDERS[p].nome}.`)
@@ -87,7 +101,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         let out = '';
         for await (const c of deps.chat({ provider: p, model, messages, apiKey, signal: deps.signal, maxTokens: MODERATOR_MAX_TOKENS }))
           out += c;
-        return out;
+        return afterThink(out) ?? '';
       } catch (err) {
         const e = asKeyError(p, err);
         if (fatal(e)) throw e;
@@ -149,9 +163,11 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     yield { type: 'status', member: m, state: 'pensando' };
 
     let turn: ParsedTag | undefined;
+    let lastErr: unknown;
     for (let i = 0; i < BACKOFF_MS.length && !turn; i++) {
       const splitter = new TagStreamSplitter();
       let raw = '';
+      let fed = 0;
       let started = false;
       let errored = false;
       try {
@@ -159,7 +175,10 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         const req = { provider: seat.provider, model: seat.model, messages, apiKey, signal: deps.signal, maxTokens: MEMBER_MAX_TOKENS };
         for await (const chunk of deps.chat(req)) {
           raw += chunk;
-          let out = splitter.push(chunk);
+          const visible = afterThink(raw);
+          if (visible === null) continue; // ainda dentro de <think>: não vai para o balão
+          let out = splitter.push(visible.slice(fed));
+          fed = visible.length;
           if (!started) {
             out = out.trimStart();
             if (!out) continue;
@@ -172,8 +191,9 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         const e = asKeyError(seat.provider, err);
         if (fatal(e)) throw e;
         errored = true;
+        lastErr = e;
       }
-      const p = parseTag(raw, others);
+      const p = parseTag(afterThink(raw) ?? '', others);
       // ponytail: stream que cai depois de já ter mostrado texto vira um turno truncado (evita turn_start sem turn_end)
       if (p.text && (started || !errored)) {
         // o splitter não tem flush: se ainda segurava um "[..." sem fechar, solta agora
@@ -183,6 +203,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         }
         turn = p;
       } else {
+        if (isPermanent(lastErr)) break; // 400/404/422: o modelo não aceita o pedido, repetir só gasta cota
         await deps.sleep(BACKOFF_MS[i]);
       }
     }
@@ -190,7 +211,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     if (!turn) {
       s.failures[m] = (s.failures[m] ?? 0) + 1;
       s.offline[m] = s.memberTurns;
-      yield { type: 'status', member: m, state: 'sem_sinal' };
+      const reason = lastErr instanceof Error ? lastErr.message.slice(0, 160) : 'resposta vazia do modelo';
+      yield { type: 'status', member: m, state: 'sem_sinal', reason };
       // o cooldown de offline conta memberTurns, que não avançam se ninguém fala: sem este freio a mesa gira para sempre
       s.stalledSteps = (s.stalledSteps ?? 0) + 1;
       if (s.stalledSteps >= config.seats.length) {

@@ -57,8 +57,10 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
       return patch(s, e.member, { gesture: { name: e.gesture, at: e.t } });
     case 'stance':
       return patch(s, e.member, { stance: e.value });
-    case 'status':
-      return patch(s, e.member, { status: e.state });
+    case 'status': {
+      const next = patch(s, e.member, { status: e.state });
+      return e.reason ? { ...next, transcript: [...next.transcript, { speaker: e.member, text: `(não respondeu: ${e.reason})` }] } : next;
+    }
     case 'hands': {
       const up = new Set(e.queue.map((h) => h.member));
       const members = Object.fromEntries(Object.entries(s.members).map(([id, m]) => [id, { ...m, handUp: up.has(id) }]));

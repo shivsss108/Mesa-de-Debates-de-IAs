@@ -50,6 +50,9 @@ export const chat: ChatFn = async function* ({ provider, model, messages, apiKey
       if (text) yield text;
     }
   } catch (e) {
-    throw toProviderError(e);
+    const err = toProviderError(e);
+    // alguns provedores ecoam a chave no erro 401; o motivo agora vai para a transcrição
+    if (apiKey && err.message.includes(apiKey)) err.message = err.message.split(apiKey).join('***');
+    throw err;
   }
 };

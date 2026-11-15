@@ -66,7 +66,7 @@ export type DebateEvent = { seq: number; t: number } & (
   | { type: 'gesture'; member: string; gesture: Gesture }
   | { type: 'stance'; member: string; value: number }
   | { type: 'hands'; queue: HandEntry[] }
-  | { type: 'status'; member: string; state: 'pensando' | 'sem_sinal' | 'ok' }
+  | { type: 'status'; member: string; state: 'pensando' | 'sem_sinal' | 'ok'; reason?: string }
   | { type: 'summary_update'; text: string }
   | { type: 'debate_end'; summary: string; consensus: string[]; openPoints: string[]; verdict: string }
   | { type: 'error'; message: string }
