@@ -39,7 +39,7 @@ export function parseGoogleRss(xml: string): NewsItem[] {
   // O <link> do Google é um redirecionamento opaco: url fica indefinida.
   return items(xml).map((b) => ({
     titulo: text(tag(b, 'title')) ?? '',
-    resumo: '',
+    resumo: text(tag(b, 'description')) ?? '',
     veiculo: text(tag(b, 'source')) || undefined,
     data: text(tag(b, 'pubDate')) || undefined,
   })).filter((i) => i.titulo)

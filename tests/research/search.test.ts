@@ -31,6 +31,8 @@ describe('parseGoogleRss', () => {
     expect(items[0].titulo).toContain('Os últimos dias de Jensen Huang')
     expect(items[0].veiculo).toBe('Valor Econômico')
     expect(items[0].url).toBeUndefined()
+    expect(items[0].resumo).toContain('Valor Econômico')
+    expect(items[0].resumo).not.toMatch(/[<>]|&nbsp;/)
   })
 })
 
@@ -62,11 +64,25 @@ describe('searchNews', () => {
     expect(urls.filter((u) => u.includes('google'))[1]).toContain('ceid=ES:es')
     expect(urls.filter((u) => u.includes('google'))[2]).toContain('hl=en-US')
   })
-  it('dedup por URL (e por título sem URL) e limita a 6', async () => {
+  it('dedup por URL', async () => {
     const item = (n: number, link: string) => `<item><title>T${n}</title><link>${link}</link><description>d</description></item>`
     const xml = '<rss><channel>' + [1, 2, 3, 4, 5, 6, 7, 8].map((n) => item(n, `https://a.com/${n % 4}`)).join('') + '</channel></rss>'
     const fetch = (async () => ok(xml)) as unknown as typeof globalThis.fetch
     const r = await searchNews('q', 'pt-BR', { fetch })
     expect(r.map((i) => i.url)).toEqual(['https://a.com/1', 'https://a.com/2', 'https://a.com/3', 'https://a.com/0'])
+  })
+  const item = (t: string, link?: string) => `<item><title>${t}</title>${link ? `<link>${link}</link>` : ''}<description>d</description></item>`
+  const rss = (...its: string[]) => '<rss><channel>' + its.join('') + '</channel></rss>'
+  const fake = (xml: string) => (async () => ok(xml)) as unknown as typeof globalThis.fetch
+  it('limita a 6 com 8 itens únicos', async () => {
+    const xml = rss(...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => item(`T${n}`, `https://a.com/${n}`)))
+    const r = await searchNews('q', 'pt-BR', { fetch: fake(xml) })
+    expect(r.map((i) => i.url)).toEqual([1, 2, 3, 4, 5, 6].map((n) => `https://a.com/${n}`))
+  })
+  it('sem URL, dedup por título (caminho do Google incluído)', async () => {
+    const xml = rss(item('Igual'), item('Igual'), item('Outro'))
+    const fetch = (async (u: string) => { if (u.includes('bing.com')) throw new Error('x'); return ok(xml) }) as unknown as typeof globalThis.fetch
+    const r = await searchNews('q', 'pt-BR', { fetch })
+    expect(r.map((i) => i.titulo)).toEqual(['Igual', 'Outro'])
   })
 })

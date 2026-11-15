@@ -25,4 +25,16 @@ describe('extractText', () => {
     expect(t).toContain('Nvidia & seus')
     expect(t).toContain('parágrafo com destaque')
   })
+  it('<article> sem <p> cai para os <p> da página', () => {
+    expect(extractText('<article>só texto</article><p>fora</p>')).toBe('fora')
+  })
+  it('<p> sem fechamento', () => {
+    expect(extractText('<p>um<p>dois</p>')).toBe('um\n\ndois')
+  })
+  it.each(['<p>x', '<script>x'])('entrada de ~1,5 MB com %s sem fechar é linear', (unit) => {
+    const big = unit.repeat(Math.ceil(1_500_000 / unit.length))
+    const t0 = performance.now()
+    extractText(big)
+    expect(performance.now() - t0).toBeLessThan(1000)
+  })
 })
