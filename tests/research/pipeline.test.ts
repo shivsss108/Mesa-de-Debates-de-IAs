@@ -40,7 +40,8 @@ describe('runResearch', () => {
     const read = async (u: string) => (u.includes('s2.') || u.includes('s5.') ? undefined : 'texto ' + u);
     const { p, progress } = run({ ...base, busca: true }, chat, { search: async () => news(6), read });
     const d = await p;
-    expect(progress).toContainEqual({ etapa: 'lendo', lidas: 4, total: 6 });
+    expect(progress).toContainEqual({ etapa: 'lendo', detalhe: 'V6', lidas: 4, total: 6 });
+    expect(progress).toContainEqual({ etapa: 'lendo', detalhe: 'V1', lidas: 1, total: 6 });
     expect(progress.at(-1)?.etapa).toBe('sintetizando');
     expect(d.fontes).toHaveLength(6);
     expect(d.fontes[1]).toEqual({ id: 'S2', titulo: 'N2', veiculo: 'V2', url: 'https://s2.com/a', data: '2026-11-01', origem: 'web' });
@@ -90,6 +91,25 @@ describe('runResearch', () => {
   });
 });
 
+describe('tamanho do dossiê', () => {
+  it('12 fontes longas + 12 fatos cabem em 8 KB (descarta fontes e fatos órfãos)', async () => {
+    const items: NewsItem[] = Array.from({ length: 12 }, (_, i) => ({
+      titulo: 'T'.repeat(300), resumo: 'r' + i, veiculo: 'V' + i, url: `https://s${i}.com/${'p'.repeat(340)}`, data: '2026-11-01',
+    }));
+    const out = JSON.stringify({
+      premissa: { status: 'confirmada', nota: 'n'.repeat(300) },
+      fatos: Array.from({ length: 12 }, (_, i) => ({ texto: 'f'.repeat(300), fontes: [`S${i + 1}`] })),
+      disputas: Array.from({ length: 5 }, () => 'd'.repeat(200)),
+    });
+    const d = await run({ ...base, busca: true }, fakeChat(['["q"]', out]).chat, { search: async () => items, read: async () => undefined, now: () => NOW }).p;
+    expect(validateDossie(d)).toBeNull();
+    expect(d.fontes.length).toBeGreaterThan(0);
+    expect(d.fontes.every((f) => f.titulo.length <= 120)).toBe(true);
+    const ids = new Set(d.fontes.map((f) => f.id));
+    expect(d.fatos.every((f) => f.fontes.length && f.fontes.every((x) => ids.has(x)))).toBe(true);
+  });
+});
+
 describe('parseResearchBody', () => {
   const ok = { ...base, keys: {} };
   it('aceita corpo válido', () => expect(parseResearchBody(ok)).toMatchObject({ ok: true }));
@@ -100,6 +120,9 @@ describe('parseResearchBody', () => {
     ['link não string', { ...ok, links: [1] }],
     ['texto inválido', { ...ok, textos: [{ nome: 'a' }] }],
     ['busca não booleana', { ...ok, busca: 'sim' }],
+    ['11 textos', { ...ok, textos: Array(11).fill({ nome: 'a', conteudo: 'x' }) }],
+    ['nome longo', { ...ok, textos: [{ nome: 'n'.repeat(201), conteudo: 'x' }] }],
+    ['texto total enorme', { ...ok, textos: Array(5).fill({ nome: 'a', conteudo: 'x'.repeat(40_001) }) }],
     ['modo ruim', { ...ok, modo: 'x' }],
     ['provedor desconhecido', { ...ok, moderador: { provider: 'zzz', model: 'm' } }],
     ['modelo vazio', { ...ok, moderador: { provider: 'groq', model: '' } }],

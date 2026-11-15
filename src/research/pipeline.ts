@@ -1,6 +1,6 @@
 import { PROVIDERS } from '@/providers/table';
 import type { Dossie, Fonte, ProviderId } from '@/types';
-import type { Keys } from '@/engine/validate';
+import { validateDossie, type Keys } from '@/engine/validate';
 import type { LlmTarget } from './llm';
 import { buildQueries } from './queries';
 import { readSource } from './read';
@@ -29,6 +29,8 @@ const MAX_FONTES = 12;
 const MAX_WEB = 6;
 const MAX_TEXTO = 6000;
 const MAX_TEXTO_TOTAL = 20_000;
+const MAX_TITULO = 120;
+const MAX_VEICULO = 80;
 
 const hostname = (u: string) => {
   try {
@@ -68,15 +70,16 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
     let lidas = 0;
     if (total) onProgress({ etapa: 'lendo', lidas, total });
     const signal = t.signal ? AbortSignal.any([deadline.signal, t.signal]) : deadline.signal;
+    const detalhes = [...input.links.map(hostname), ...web.filter((i) => i.url).map((i) => (i.veiculo || hostname(i.url!)).slice(0, MAX_VEICULO))];
     const lido = await Promise.all(
-      urls.map(async (url) => {
+      urls.map(async (url, idx) => {
         const text = await Promise.race([
           read(url, { signal }).catch(() => undefined),
           new Promise<undefined>((r) => deadline.signal.addEventListener('abort', () => r(undefined), { once: true })),
         ]);
         const clean = text?.trim() || undefined;
-        if (clean) onProgress({ etapa: 'lendo', lidas: ++lidas, total });
-        else if (!deadline.signal.aborted) onProgress({ etapa: 'lendo', lidas, total });
+        if (clean) onProgress({ etapa: 'lendo', detalhe: detalhes[idx], lidas: ++lidas, total });
+        else if (!deadline.signal.aborted) onProgress({ etapa: 'lendo', detalhe: detalhes[idx], lidas, total });
         return clean;
       }),
     );
@@ -91,13 +94,13 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
       const conteudo = x.conteudo.trim().slice(0, Math.min(MAX_TEXTO, restante));
       if (!conteudo) continue;
       restante -= conteudo.length;
-      cru.push({ titulo: x.nome, origem: /\.\w+$/.test(x.nome) ? 'arquivo' : 'texto', conteudo });
+      cru.push({ titulo: x.nome.slice(0, MAX_TITULO), origem: /\.\w+$/.test(x.nome) ? 'arquivo' : 'texto', conteudo });
     }
     let k = input.links.length;
     for (const item of web) {
       const conteudo = (item.url ? lido[k++] : undefined) ?? item.resumo;
       if (!conteudo) continue;
-      cru.push({ titulo: item.titulo, veiculo: item.veiculo, url: item.url, data: item.data, origem: 'web', conteudo });
+      cru.push({ titulo: item.titulo.slice(0, MAX_TITULO), veiculo: item.veiculo?.slice(0, MAX_VEICULO), url: item.url, data: item.data, origem: 'web', conteudo });
     }
     const fontes: FonteLida[] = cru.slice(0, MAX_FONTES).map((f, i) => {
       const o = { id: `S${i + 1}`, ...f };
@@ -114,10 +117,24 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
     } else {
       saida = { premissa: { status: 'nao_encontrada', nota: 'Nenhuma fonte encontrada sobre o tema.' }, fatos: [], disputas: [] };
     }
-    return { geradoEm, ...saida, fontes: fontes.map(({ conteudo: _c, ...f }) => f), modo: input.modo };
+    return fit({ geradoEm, ...saida, fontes: fontes.map(({ conteudo: _c, ...f }) => f), modo: input.modo });
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Se o dossiê estoura 8 KB, descarta fontes (as não citadas primeiro, depois as finais) e os fatos que ficam sem fonte. */
+function fit(d: Dossie): Dossie {
+  while (d.fontes.length && validateDossie(d)?.includes('8 KB')) {
+    const citadas = new Set(d.fatos.flatMap((f) => f.fontes));
+    const drop = [...d.fontes].reverse().find((f) => !citadas.has(f.id)) ?? d.fontes[d.fontes.length - 1];
+    d = {
+      ...d,
+      fontes: d.fontes.filter((f) => f !== drop),
+      fatos: d.fatos.map((f) => ({ ...f, fontes: f.fontes.filter((x) => x !== drop.id) })).filter((f) => f.manual || f.fontes.length),
+    };
+  }
+  return d;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -146,6 +163,8 @@ export function parseResearchBody(body: unknown): { ok: true; value: ResearchInp
   if (!Array.isArray(links) || links.length > 5 || !links.every((l) => typeof l === 'string')) return bad('No máximo 5 links.');
   if (!Array.isArray(textos) || !textos.every((x) => isObj(x) && typeof x.nome === 'string' && typeof x.conteudo === 'string'))
     return bad('Textos inválidos.');
+  if (textos.length > 10 || textos.some((x) => (x.nome as string).length > 200)) return bad('No máximo 10 textos, com nome de até 200 caracteres.');
+  if (textos.reduce((n, x) => n + (x.conteudo as string).length, 0) > 200_000) return bad('Texto demais (máx. 200 000 caracteres).');
   if (!['todos', 'dividido', 'recorte'].includes(modo as string)) return bad('Modo inválido.');
   if (keys !== undefined && !isObj(keys)) return bad('keys inválido.');
   return {
