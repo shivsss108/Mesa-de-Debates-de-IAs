@@ -18,10 +18,10 @@ const FONT = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 /* Materiais e geometrias compartilhados (cache de módulo, como no avatar). */
 const LEDS = new Map<string, THREE.MeshStandardMaterial>();
-function led(color: string, intensity = 2.2) {
-  const key = `${color}|${intensity}`;
+function led(color: string, intensity = 2.2, side: THREE.Side = THREE.FrontSide) {
+  const key = `${color}|${intensity}|${side}`;
   let m = LEDS.get(key);
-  if (!m) LEDS.set(key, (m = new THREE.MeshStandardMaterial({ color: '#000000', emissive: color, emissiveIntensity: intensity, toneMapped: false })));
+  if (!m) LEDS.set(key, (m = new THREE.MeshStandardMaterial({ color: '#000000', emissive: color, emissiveIntensity: intensity, toneMapped: false, side })));
   return m;
 }
 const FLOOR = new THREE.MeshStandardMaterial({ color: BG, roughness: 0.35, metalness: 0.2 });
@@ -71,6 +71,15 @@ function useCanvasMat() {
     return () => m?.emissiveMap?.dispose();
   }, []);
   return mat;
+}
+
+/** Fonte no maior tamanho ≤ px em que todas as linhas cabem em max (nunca espremer via maxWidth). */
+function fitFont(ctx: CanvasRenderingContext2D, lines: string[], weight: number, px: number, max: number) {
+  for (; px > 12; px -= 2) {
+    ctx.font = `${weight} ${px}px ${FONT}`;
+    if (lines.every((l) => ctx.measureText(l).width <= max)) break;
+  }
+  return px;
 }
 
 function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number) {
@@ -167,30 +176,31 @@ function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; s
       // tema
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
-      ctx.font = `700 92px ${FONT}`;
-      const y0 = tema.length > 1 ? 300 : 350;
-      tema.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * 108, W - 120));
+      const px = fitFont(ctx, tema, 700, 92, W - 120);
+      const lh = px * 1.18;
+      const y0 = (H - 150 + 130) / 2 - ((tema.length - 1) * lh) / 2; // centrado entre o cabeçalho e o rodapé
+      tema.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * lh));
       // rodapé
       ctx.fillStyle = 'rgba(58,160,255,0.18)';
       ctx.fillRect(0, H - 150, W, 150);
       ctx.fillStyle = LED;
       ctx.fillRect(0, H - 150, W, 6);
       ctx.fillStyle = '#e6eefc';
-      ctx.font = `600 58px ${FONT}`;
-      ctx.fillText(status, W / 2, H - 72, W - 120);
+      fitFont(ctx, [status], 600, 58, W - 120);
+      ctx.fillText(status, W / 2, H - 72);
     });
   }, [mat, key]);
   return (
     <group position={position}>
       <mesh position={[0, 0, -0.06]} material={FRAME}>
-        <boxGeometry args={[5.0, 2.95, 0.1]} />
+        <boxGeometry args={[4.4, 2.56, 0.1]} />
       </mesh>
       <mesh>
-        <planeGeometry args={[4.8, 2.7]} />
+        <planeGeometry args={[4.2, 2.36]} />
         <meshStandardMaterial ref={mat} color="#000000" emissiveIntensity={1} toneMapped={false} />
       </mesh>
-      <mesh position={[0, -1.5, 0]} material={led(LED)}>
-        <boxGeometry args={[5.0, 0.04, 0.04]} />
+      <mesh position={[0, -1.31, 0]} material={led(LED)}>
+        <boxGeometry args={[4.4, 0.04, 0.04]} />
       </mesh>
     </group>
   );
@@ -273,14 +283,15 @@ export function Studio({ radius, seats, speakerId, elapsedMs, scene }: {
       <mesh material={WALL} position={[0, 2.5, 0]}>
         <cylinderGeometry args={[wallR, wallR, 5, 64, 1, true, THETA[0], THETA[1]]} />
       </mesh>
-      <mesh material={led(LED)} position={[0, 0.35, 0]}>
+      {/* cilindro aberto: normais para fora, vemos o lado de dentro → BackSide */}
+      <mesh material={led(LED, 2.2, THREE.BackSide)} position={[0, 0.35, 0]}>
         <cylinderGeometry args={[wallR - 0.06, wallR - 0.06, 0.06, 64, 1, true, THETA[0], THETA[1]]} />
       </mesh>
-      <mesh material={led(ACCENT)} position={[0, 4.3, 0]}>
+      <mesh material={led(ACCENT, 2.2, THREE.BackSide)} position={[0, 4.85, 0]}>
         <cylinderGeometry args={[wallR - 0.06, wallR - 0.06, 0.06, 64, 1, true, THETA[0], THETA[1]]} />
       </mesh>
       {vStrips.map((p, i) => <mesh key={i} geometry={G.vStrip} material={led(i % 2 ? ACCENT : LED, 1.6)} position={p} />)}
-      <Telao scene={scene} speakerId={speakerId} elapsedMs={elapsedMs} position={[0, 3.05, -radius - 1.9]} />
+      <Telao scene={scene} speakerId={speakerId} elapsedMs={elapsedMs} position={[0, 3.5, -radius - 1.9]} />
       {/* púlpitos e bancada, posicionados como o avatar do assento */}
       {poses.map((p, i) => (
         <group key={i} position={p.position} rotation-y={p.rotationY}>
