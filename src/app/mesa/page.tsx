@@ -50,7 +50,7 @@ function ReplayRun({ replay }: { replay: Replay }) {
   return (
     <>
       <Stage scene={r.scene} defaultCamera="diretor"
-        controls={{ ...r, onStop: () => router.push('/'), onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }} />
+        controls={{ ...r, badge: 'REPRISE', onStop: () => router.push('/'), onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }} />
       <EndPanel scene={r.scene} events={replay.events} onNew={() => router.push('/config')} />
     </>
   );
@@ -86,7 +86,7 @@ function Live() {
         scene={d.scene}
         defaultCamera="orbita"
         controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
-          onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available }}
+          onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available, badge: 'AO VIVO' }}
       />
       <EndPanel scene={d.scene} events={d.events} onNew={() => router.push('/config')} />
     </>

@@ -1,0 +1,63 @@
+/* HUD de programa de TV. Altura reservada da barra = --controls-h (globals.css), lida também pelo GC/legenda/transcrição. */
+.root { position: absolute; inset: 0; pointer-events: none; font-size: 13px; color: var(--fg); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px); }
+
+/* selo do programa */
+.bug { position: absolute; z-index: 6; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; }
+.turn { font-family: var(--font-display), 'Arial Narrow', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+
+/* "Pedindo a palavra": abaixo do botão Transcrição */
+.hands { position: absolute; z-index: 6; top: 60px; right: 12px; width: min(280px, calc(100vw - 24px)); padding: 8px 12px; }
+.hands h2 { font-family: var(--font-display), 'Arial Narrow', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-2); margin-bottom: 4px; }
+.hands ul { list-style: none; display: grid; gap: 2px; }
+.hands li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reason { color: var(--muted); }
+
+/* nome na cor do membro, clareado para manter contraste AA sobre o painel */
+.name { font-weight: 700; color: color-mix(in srgb, var(--cor, var(--accent)) 55%, #fff); }
+
+/* barra de controles: pílula central inferior que some quando ociosa */
+.bar {
+  /* left/right + fit-content: com left:50% a largura disponível seria só meia tela e a pílula quebraria em 3 linhas */
+  position: absolute; z-index: 6; bottom: 12px; left: 12px; right: 12px; width: fit-content; margin-inline: auto;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px;
+  padding: 6px; border-radius: 999px;
+  pointer-events: auto; transition: opacity 0.3s, transform 0.3s;
+}
+.hidden { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.btn {
+  font: inherit; font-weight: 600; height: 32px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--fg); border: 1px solid var(--line); white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent-2); }
+.btn[aria-pressed='true'], .btn[aria-expanded='true'] { background: var(--accent); color: #1c1306; border-color: var(--accent-2); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.stop { border-color: var(--danger); color: var(--danger); }
+.sep { width: 1px; height: 20px; background: var(--line); }
+
+.sources {
+  position: absolute; z-index: 7; bottom: calc(var(--controls-h) + 8px); left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; padding: 12px 16px; pointer-events: auto; line-height: 1.5;
+}
+.sources ul { padding-left: 18px; margin-bottom: 8px; }
+.sources a { text-decoration: underline; }
+.sources h4 { font-size: 12px; color: var(--muted); margin: 4px 0; }
+
+/* cartão do membro: sob o selo, longe do GC */
+.card { position: absolute; z-index: 6; top: 84px; left: 12px; width: 280px; padding: 10px 12px; display: grid; grid-template-columns: 56px 1fr; gap: 4px 10px; line-height: 1.45; border-top: 3px solid var(--cor, var(--accent)); }
+.card .name { font-family: var(--font-display), 'Arial Narrow', sans-serif; font-size: 20px; line-height: 1.1; align-self: end; }
+.card > svg { grid-row: span 2; background: var(--panel-solid); border-radius: 8px; }
+.card .meta { color: var(--muted); }
+.card .meta b { color: var(--fg); font-weight: 600; }
+.meter { position: relative; height: 8px; margin-top: 4px; background: var(--line); border-radius: 4px; grid-column: 1 / -1; }
+.meter::before { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--fg); }
+.fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+
+@media (max-width: 599px) {
+  .hands { top: 84px; }
+  .card { top: 84px; width: min(280px, calc(100vw - 24px)); }
+  .sep, .wide { display: none; }
+  .btn { padding: 0 10px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar { transition: none; } }

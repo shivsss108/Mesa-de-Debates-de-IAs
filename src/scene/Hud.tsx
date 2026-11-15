@@ -1,13 +1,19 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
 import { Sources } from '@/scene/Sources';
 import { memberName } from '@/scene/names';
+import { lowerThirdInfo } from '@/scene/LowerThird';
 import { CAMERA_LABEL, type CameraMode } from '@/scene/Cameras';
+import { useIdle } from '@/scene/useIdle';
+import { Logo } from '@/app/Logo';
+import { AvatarThumb } from '@/skins/terno/AvatarThumb';
+import { looksFor } from '@/skins/terno/look';
 import { PROVIDERS } from '@/providers/table';
 import { resolveTemperamento } from '@/presets/temperamentos';
 import { resolveExpertise } from '@/presets/expertises';
+import s from './Hud.module.css';
 
 export interface StageControls {
   pause: (p: boolean) => void;
@@ -18,67 +24,79 @@ export interface StageControls {
   onVoice?: () => void;
   voiceOn?: boolean;
   voiceAvailable?: boolean;
+  /** selo do programa: ao vivo ou replay */
+  badge?: 'AO VIVO' | 'REPRISE';
 }
 
-const panel: React.CSSProperties = { background: 'rgba(5,20,22,.85)', color: '#e8f1f1', borderRadius: 8, padding: '8px 12px', fontSize: 13 };
-const btn: React.CSSProperties = { background: '#16393d', color: '#e8f1f1', border: '1px solid #fff4', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' };
 const SPEEDS = [1, 1.5, 2] as const;
+/** cor do membro em `--cor` (o CSS clareia para contraste) */
+export const corStyle = (scene: SceneState, id: string) =>
+  (scene.config ? { '--cor': lowerThirdInfo(scene.config, id).cor } : {}) as CSSProperties;
 
 export function Hud({ scene, controls, camera, onCamera, hovered }: {
   scene: SceneState; controls: StageControls; camera: CameraMode; onCamera: () => void; hovered?: string;
 }) {
   const [paused, setPaused] = useState(false);
   const [srcOpen, setSrcOpen] = useState(false);
+  const bar = useRef<HTMLDivElement>(null);
+  const idle = useIdle(bar);
   const c = scene.config;
   const hasSources = !!c?.dossie?.fontes.length || scene.extraSources.length > 0;
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ ...panel, position: 'absolute', top: 12, left: 12, maxWidth: 360 }}>
-        <strong>{c?.tema ?? 'Carregando…'}</strong>
-        <div>Turno {scene.memberTurns}/{c?.maxTurns ?? '–'}</div>
-        {scene.hands.length > 0 && (
-          <ul aria-label="Fila de mãos levantadas" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-            {scene.hands.map((h) => (
-              <li key={h.member}>✋ {memberName(c, h.member)} — {h.reason}</li>
-            ))}
-          </ul>
-        )}
+    <div className={s.root}>
+      <div className={`${s.panel} ${s.bug}`}>
+        <Logo badge={controls.badge} />
+        <span className={s.turn}>Turno {scene.memberTurns}/{c?.maxTurns ?? '–'}</span>
       </div>
 
+      {scene.hands.length > 0 && (
+        <section className={`${s.panel} ${s.hands}`} aria-label="Pedindo a palavra">
+          <h2>Pedindo a palavra</h2>
+          <ul>
+            {scene.hands.map((h) => (
+              <li key={h.member} title={h.reason}>
+                <span className={s.name} style={corStyle(scene, h.member)}>{memberName(c, h.member)}</span>
+                <span className={s.reason}> — {h.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {hasSources && srcOpen && (
-        <div id="painel-fontes" style={{ ...panel, position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, 90vw)', maxHeight: '40vh', overflowY: 'auto', pointerEvents: 'auto' }}>
+        <div id="painel-fontes" className={`${s.panel} ${s.sources}`}>
           <Sources dossie={c?.dossie} extra={scene.extraSources} config={c} />
         </div>
       )}
 
       {hovered && <HoverCard scene={scene} id={hovered} />}
 
-      <div style={{ ...panel, position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'auto' }}>
-        <button type="button" style={btn} aria-label={paused ? 'Retomar debate' : 'Pausar debate'}
+      <div ref={bar} role="toolbar" aria-label="Controles do programa" className={`${s.panel} ${s.bar} ${idle ? s.hidden : ''}`}>
+        <button type="button" className={s.btn} aria-label={paused ? 'Retomar debate' : 'Pausar debate'}
           onClick={() => { controls.pause(!paused); setPaused(!paused); }}>
           {paused ? '▶ Retomar' : '⏸ Pausar'}
         </button>
-        {SPEEDS.map((s) => (
-          <button key={s} type="button" aria-label={`Velocidade ${s}x`} aria-pressed={controls.speed === s}
-            style={{ ...btn, ...(controls.speed === s ? { background: '#b5762f' } : {}) }} onClick={() => controls.setSpeed(s)}>
-            {s}×
+        {SPEEDS.map((v) => (
+          <button key={v} type="button" className={s.btn} aria-label={`Velocidade ${v}x`} aria-pressed={controls.speed === v}
+            onClick={() => controls.setSpeed(v)}>
+            {v}×
           </button>
         ))}
-        <button type="button" style={btn} aria-label="Alternar câmera (tecla C)" onClick={onCamera}>
-          Câmera: {CAMERA_LABEL[camera]}
+        <span className={s.sep} aria-hidden="true" />
+        <button type="button" className={s.btn} aria-label={`Alternar câmera (tecla C), atual: ${CAMERA_LABEL[camera]}`} onClick={onCamera}>
+          <span className={s.wide}>Câmera: </span>{CAMERA_LABEL[camera]}
         </button>
-        <button type="button" aria-label="Voz" aria-pressed={!!controls.voiceOn}
-          style={{ ...btn, ...(controls.voiceOn ? { background: '#b5762f' } : {}), opacity: controls.voiceAvailable ? 1 : 0.5 }}
+        <button type="button" className={s.btn} aria-label="Voz" aria-pressed={!!controls.voiceOn}
           disabled={!controls.onVoice || !controls.voiceAvailable}
           title={controls.voiceAvailable ? undefined : 'Seu navegador não tem voz disponível'} onClick={controls.onVoice}>
-          {controls.voiceOn ? '🔊 Voz: ligada' : '🔇 Voz'}
+          {controls.voiceOn ? '🔊 Voz' : '🔇 Voz'}
         </button>
         {hasSources && (
-          <button type="button" style={btn} aria-expanded={srcOpen} aria-controls="painel-fontes" onClick={() => setSrcOpen(!srcOpen)}>
+          <button type="button" className={s.btn} aria-expanded={srcOpen} aria-controls="painel-fontes" onClick={() => setSrcOpen(!srcOpen)}>
             Fontes
           </button>
         )}
-        <button type="button" style={{ ...btn, background: '#7a2323' }} aria-label="Encerrar debate" onClick={controls.onStop}>
+        <button type="button" className={`${s.btn} ${s.stop}`} aria-label="Encerrar debate" onClick={controls.onStop}>
           Encerrar
         </button>
       </div>
@@ -88,30 +106,30 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
 
 function HoverCard({ scene, id }: { scene: SceneState; id: string }) {
   const c = scene.config;
+  const looks = useMemo(() => looksFor(c?.seats ?? []), [c?.seats]);
   if (!c) return null;
-  const seat = c.seats.find((s) => s.id === id);
+  const seat = c.seats.find((x) => x.id === id);
   const stance = scene.members[id]?.stance ?? 0;
   const who = seat ?? c.moderador;
+  const look = looks[id === MODERATOR_ID ? 'moderador' : id];
   return (
-    <div style={{ ...panel, position: 'absolute', bottom: 80, left: 12, width: 260 }}>
-      <strong>{memberName(c, id)}</strong>
-      <div>Modelo: {who.model}</div>
-      <div>Provedor: {PROVIDERS[who.provider].nome}</div>
-      {seat ? (
-        <>
-          <div>Temperamento: {resolveTemperamento(seat.temperamento).nome}</div>
-          <div>Expertise: {resolveExpertise(seat.expertise).nome}</div>
-          <div style={{ marginTop: 6 }}>Posição: {stance.toFixed(2)}</div>
-          <div role="meter" aria-label="Posição" aria-valuemin={-1} aria-valuemax={1} aria-valuenow={stance}
-            style={{ position: 'relative', height: 8, background: '#fff3', borderRadius: 4 }}>
-            <div style={{ position: 'absolute', left: '50%', width: 1, top: 0, bottom: 0, background: '#fff' }} />
-            <div style={{ position: 'absolute', top: 0, bottom: 0, borderRadius: 4, background: stance >= 0 ? '#66bb6a' : '#ef5350',
-              left: `${50 + Math.min(0, stance) * 50}%`, width: `${Math.abs(stance) * 50}%` }} />
-          </div>
-        </>
-      ) : (
-        id === MODERATOR_ID && <div>Provocação: {c.moderador.provocacao}</div>
+    <section className={`${s.panel} ${s.card}`} style={corStyle(scene, id)} aria-label={`Cartão de ${memberName(c, id)}`}>
+      {look && <AvatarThumb look={look} size={56} />}
+      <h2 className={s.name}>{memberName(c, id)}</h2>
+      <div className={s.meta}>
+        <div><b>{who.model}</b> · {PROVIDERS[who.provider].nome}</div>
+        {seat ? (
+          <div>{resolveTemperamento(seat.temperamento).nome} · {resolveExpertise(seat.expertise).nome}</div>
+        ) : (
+          id === MODERATOR_ID && <div>Provocação: {c.moderador.provocacao}</div>
+        )}
+        {seat && <div>Posição: {stance.toFixed(2)}</div>}
+      </div>
+      {seat && (
+        <div className={s.meter} role="meter" aria-label="Posição" aria-valuemin={-1} aria-valuemax={1} aria-valuenow={stance}>
+          <div className={s.fill} style={{ background: stance >= 0 ? '#66bb6a' : '#ef5350', left: `${50 + Math.min(0, stance) * 50}%`, width: `${Math.abs(stance) * 50}%` }} />
+        </div>
       )}
-    </div>
+    </section>
   );
 }

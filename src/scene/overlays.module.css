@@ -1,5 +1,5 @@
-/* GC + legenda. Offset inferior da barra de controles (pílula ~52px a 12px): ajustar --controls-h aqui (Task 9 restiliza o HUD). */
-.root { --controls-h: 64px; --cap-h: 68px; --gap: 8px; }
+/* GC + legenda. --controls-h (altura reservada da barra do HUD) vem de globals.css. */
+.root { --cap-h: 68px; --gap: 8px; }
 
 .caption {
   position: absolute; z-index: 5; left: 50%; transform: translateX(-50%);

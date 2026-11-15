@@ -10,7 +10,10 @@
   --led: #3aa0ff;
   --live: #ff3b47;
   --danger: #ff8a7a;
+  /* espaço reservado pela barra de controles do HUD (pílula 44px a 12px do fundo); GC, legenda e transcrição ficam acima */
+  --controls-h: 64px;
 }
+@media (max-width: 599px) { :root { --controls-h: 100px; } } /* barra em 2 linhas */
 
 html { height: 100%; color-scheme: dark; }
 html, body { max-width: 100vw; overflow-x: hidden; }

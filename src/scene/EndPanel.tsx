@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DebateEvent } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
 import { Sources } from '@/scene/Sources';
+import { Logo } from '@/app/Logo';
 import s from './EndPanel.module.css';
 
 export function EndPanel({ scene, events, onNew }: { scene: SceneState; events: DebateEvent[]; onNew: () => void }) {
@@ -33,8 +34,11 @@ export function EndPanel({ scene, events, onNew }: { scene: SceneState; events: 
 
   return (
     <div className={s.overlay} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Fim do debate" className={s.dialog}>
-        <h2>Fim do debate</h2>
+      <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="encerramento-titulo" className={s.dialog}>
+        <header className={s.head}>
+          <Logo size="sm" />
+          <h2 id="encerramento-titulo">Encerramento</h2>
+        </header>
         <h3>Resumo</h3>
         <p>{end.summary}</p>
         <h3>Consensos</h3>
