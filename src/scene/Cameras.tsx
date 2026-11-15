@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -7,11 +7,12 @@ import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
 import { studioSize } from '@/scene/layout';
 import { typingTarget } from '@/scene/keys';
+import { REACTION_AT, shotFor, wideFraming } from '@/scene/shots';
+import { speechProgress } from '@/voice/speech';
 
 export type CameraMode = 'diretor' | 'orbita' | 'livre';
 export const CAMERA_LABEL: Record<CameraMode, string> = { diretor: 'Diretor', orbita: 'Órbita', livre: 'Livre' };
 const SPEED = 3; // u/s
-const CLOSE_MS = 1500;
 
 interface Props {
   mode: CameraMode;
@@ -73,42 +74,57 @@ function FreeCam({ limit }: { limit: number }) {
   return <PointerLockControls selector="canvas" />;
 }
 
+const CLOSE_DIST = 1.4; // m à frente do alvo
+const CLOSE_SIDE = (25 * Math.PI) / 180; // 3/4, deslocado para o centro do arco
+const PUSH_IN = 0.3; // m de aproximação ao longo da fala
+
 function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | 'radius'>) {
-  const lookAt = useRef(new THREE.Vector3(0, 0.8, 0));
-  const close = useRef<{ id: string; until: number }>(undefined);
-  const seen = useRef<Record<string, number | undefined>>({});
+  const aspect = useThree((s) => s.size.width / s.size.height);
+  const wide = useMemo(() => wideFraming(radius, aspect), [radius, aspect]);
+  const reduced = useRef(false);
+  const turn = useRef<{ seq: number; since?: number; done: boolean }>({ seq: NaN, done: false });
+  const push = useRef(0);
+  const last = useRef('');
+  const cam = useRef(new THREE.Vector3());
+  const look = useRef(new THREE.Vector3());
 
-  // close de 1.5s quando chega gesture bater_na_mesa
   useEffect(() => {
-    for (const [id, m] of Object.entries(scene.members)) {
-      if (m.gesture?.name === 'bater_na_mesa' && seen.current[id] !== m.gesture.at) {
-        seen.current[id] = m.gesture.at;
-        close.current = { id, until: performance.now() + CLOSE_MS };
-      }
-    }
-  }, [scene.members]);
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    const read = () => { reduced.current = mq.matches; };
+    read();
+    mq.addEventListener('change', read);
+    return () => mq.removeEventListener('change', read);
+  }, []);
 
-  const sp = scene.speaker;
-  const cam = new THREE.Vector3();
-  const look = new THREE.Vector3();
   useFrame(({ camera }, dt) => {
-    const c = close.current && close.current.until > performance.now() ? close.current.id : undefined;
-    const id = c ?? sp;
-    const p = id && id !== MODERATOR_ID ? posOf[id] : undefined;
+    const now = performance.now();
+    const { speaker, addressedTo, turnSeq } = scene;
+    const { speaking, progress } = speaker ? speechProgress(speaker, turnSeq) : { speaking: false, progress: 0 };
+    const t = turn.current;
+    if (t.seq !== turnSeq) Object.assign(t, { seq: turnSeq, since: undefined, done: false });
+    // reação: uma vez por turno, quando a fala cruza REACTION_AT
+    if (!t.done && addressedTo && speaking && progress >= REACTION_AT) Object.assign(t, { since: now, done: true });
+
+    const shot = shotFor({ speaker, addressedTo, speaking, progress, reactionSince: t.since, now, reducedMotion: reduced.current });
+    const p = shot.target ? posOf[shot.target] : undefined;
+    const key = `${shot.kind}:${shot.target ?? ''}`;
+    if (key !== last.current) { last.current = key; push.current = 0; } // corte seco: push-in recomeça
+
     if (!p) {
-      cam.set(0, 3.2, radius + 3);
-      look.set(0, 0.8, 0);
+      cam.current.set(...wide.pos);
+      look.current.set(...wide.look);
     } else {
-      const dir = new THREE.Vector3(p[0], 0, p[2]).normalize();
-      // de frente e acima do orador, além do lado oposto da mesa: vê vizinhos e parte da mesa
-      const back = c ? 2.2 : radius + 3.2;
-      cam.set(p[0] - dir.x * back, c ? 1.9 : 2.4, p[2] - dir.z * back);
-      look.set(p[0], c ? 1.4 : 1.5, p[2]);
+      // frente do alvo: moderador olha +Z; membros olham para a origem
+      const fwd = shot.target === MODERATOR_ID ? 0 : Math.atan2(-p[0], -p[2]);
+      const ang = fwd + (p[0] > 0.01 ? -CLOSE_SIDE : CLOSE_SIDE); // gira para o lado do centro do arco
+      const goal = shot.kind === 'close' && !reduced.current ? PUSH_IN * progress : 0;
+      push.current += (goal - push.current) * (1 - Math.exp(-3 * dt)); // suaviza os saltos palavra a palavra
+      const d = CLOSE_DIST - push.current;
+      cam.current.set(p[0] + Math.sin(ang) * d, 1.8, p[2] + Math.cos(ang) * d);
+      look.current.set(p[0], 1.6, p[2]);
     }
-    const a = 1 - Math.exp(-3 * dt);
-    camera.position.lerp(cam, a);
-    lookAt.current.lerp(look, a);
-    camera.lookAt(lookAt.current);
+    camera.position.copy(cam.current);
+    camera.lookAt(look.current);
   });
   return null;
 }

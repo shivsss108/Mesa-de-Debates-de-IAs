@@ -75,3 +75,9 @@ export async function say(
 export function mouthOpen(speaker: string, now: number): number {
   return speech.speaker === speaker && now - speech.pulseAt < PULSE_MS ? speech.amp : 0;
 }
+
+/** Fala deste turno de `speaker`: se já começou e que fração do texto (0..1) já foi dita. */
+export function speechProgress(speaker: string, turnSeq: number): { speaking: boolean; progress: number } {
+  const mine = speech.speaker === speaker && speech.seq > turnSeq;
+  return { speaking: mine, progress: mine && speech.text ? speech.shown / speech.text.length : 0 };
+}

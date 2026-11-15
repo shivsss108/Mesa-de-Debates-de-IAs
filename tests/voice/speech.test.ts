@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bubbleText, cancelSpeech, mouthOpen, PULSE_MS, say, speech, wordEnds, WPS } from '@/voice/speech';
+import { bubbleText, cancelSpeech, mouthOpen, PULSE_MS, say, speech, speechProgress, wordEnds, WPS } from '@/voice/speech';
 
 afterEach(() => {
   cancelSpeech();
@@ -54,5 +54,22 @@ describe('bubbleText', () => {
     Object.assign(speech, { seq: 300, speaker: 'm1', text: 'velho', shown: 5 });
     cancelSpeech();
     expect(bubbleText('m1', 3)).toBe('…');
+  });
+});
+
+describe('speechProgress', () => {
+  it('não começou → speaking false; durante → progresso; outro orador/turno → false', async () => {
+    vi.useFakeTimers();
+    expect(speechProgress('m1', 5)).toEqual({ speaking: false, progress: 0 });
+    const done = say({ seq: 10, speaker: 'm1', text: 'um dois tres' }, { speed: () => 1 });
+    const p = speechProgress('m1', 5);
+    expect(p.speaking).toBe(true);
+    expect(p.progress).toBeGreaterThan(0);
+    expect(p.progress).toBeLessThan(1);
+    expect(speechProgress('m2', 5)).toEqual({ speaking: false, progress: 0 });
+    expect(speechProgress('m1', 12)).toEqual({ speaking: false, progress: 0 });
+    await vi.advanceTimersByTimeAsync(3000);
+    await done;
+    expect(speechProgress('m1', 5)).toEqual({ speaking: true, progress: 1 });
   });
 });
