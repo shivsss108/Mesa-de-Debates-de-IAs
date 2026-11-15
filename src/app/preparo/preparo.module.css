@@ -1,0 +1,7 @@
+.list { list-style: none; display: grid; gap: 10px; }
+.row { display: flex; gap: 8px; align-items: flex-start; }
+.row > :first-child { flex: 1; min-width: 0; }
+.tag { font-size: 11px; color: var(--accent-2); border: 1px solid var(--accent-2); border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.src { font-size: 13.5px; color: var(--fg); }
+.src a { color: inherit; text-decoration: underline; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

@@ -8,6 +8,7 @@ import { defaultNames, randomizePersonalities } from '@/presets/randomize';
 import type { DebateConfig, ProviderId, Seat } from '@/types';
 import { Mascote } from '../Mascote';
 import { ModelPicker, SeatCard } from './SeatCard';
+import { Repertorio, REPERTORIO_VAZIO } from './Repertorio';
 import { validateConfig } from './validateConfig';
 import { bestOf, randomModels, variedBest } from './assignModels';
 import s from './config.module.css';
@@ -58,6 +59,7 @@ export default function ConfigPage() {
   const [loading, setLoading] = useState(false);
   const [loadErrors, setLoadErrors] = useState<string[]>([]);
   const [turnsText, setTurnsText] = useState<string>();
+  const [rep, setRep] = useState<Repertorio>(REPERTORIO_VAZIO);
   const modTouched = useRef(false);
 
   useEffect(() => {
@@ -66,11 +68,15 @@ export default function ConfigPage() {
     modTouched.current = !!saved;
     setConfig(saved?.seats?.length ? saved : defaultConfig());
     setKeys(readSession<Keys>('mesa:keys') ?? {});
+    setRep(readSession<Repertorio>('mesa:repertorio') ?? REPERTORIO_VAZIO);
     fetch('/api/models/env').then((r) => r.json()).then((ids: ProviderId[]) => setEnv(ids)).catch(() => {});
   }, []);
 
   const shown = useMemo(() => (onlyFree ? models.filter((m) => m.free) : models), [models, onlyFree]);
-  const problems = useMemo(() => (config ? validateConfig(config, keys, env) : []), [config, keys, env]);
+  const problems = useMemo(() => {
+    const p = config ? validateConfig(config, keys, env) : [];
+    return rep.links.length > 5 ? [...p, 'No máximo 5 links no repertório.'] : p;
+  }, [config, keys, env, rep.links.length]);
 
   const update = useCallback((fn: (c: DebateConfig) => DebateConfig) => setConfig((c) => c && fn(c)), []);
   const setSeats = (fn: (seats: Seat[]) => Seat[]) =>
@@ -148,9 +154,17 @@ export default function ConfigPage() {
   };
 
   const start = () => {
-    writeSession('mesa:config', config);
+    const { membrosPesquisam } = rep;
+    writeSession('mesa:repertorio', rep);
     writeSession('mesa:keys', keys);
-    router.push('/mesa');
+    const semRepertorio = !rep.busca && !rep.links.length && !rep.textos.some((x) => x.conteudo.trim());
+    if (semRepertorio) {
+      writeSession('mesa:config', { ...config, dossie: undefined, membrosPesquisam }); // dossiê antigo não vale mais
+      router.push('/mesa');
+    } else {
+      writeSession('mesa:config', { ...config, membrosPesquisam });
+      router.push('/preparo');
+    }
   };
 
   return (
@@ -242,6 +256,8 @@ export default function ConfigPage() {
             ))}
           </div>
         </section>
+
+        <Repertorio value={rep} onChange={setRep} />
 
         <section className={s.block} aria-labelledby="h-keys">
           <h2 id="h-keys">Chaves de API</h2>

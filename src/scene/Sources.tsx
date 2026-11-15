@@ -2,7 +2,7 @@ import type { DebateConfig, Dossie, Fonte } from '@/types';
 import { memberName } from '@/scene/names';
 
 /** só http(s): url vem da web/usuário e poderia ser javascript: */
-function safeHref(url?: string): string | undefined {
+export function safeHref(url?: string): string | undefined {
   try {
     const u = new URL(url ?? '');
     return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : undefined;
