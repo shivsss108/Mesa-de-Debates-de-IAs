@@ -100,7 +100,7 @@ export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = fal
     const d = st.drawn;
     const changed = offline || d.emotion !== view.emotion || d.blink !== blink || d.mouth !== mouth || d.offline !== offline;
     if (changed && now - st.lastDraw >= FACE_MS) {
-      drawFace(st.ctx, view.emotion, { blink, mouthOpen: mouth, offline });
+      drawFace(st.ctx, view.emotion, { blink, mouthOpen: mouth, offline, skin: '#e0b89a' });
       st.tex.needsUpdate = true;
       st.lastDraw = now;
       d.emotion = view.emotion; d.blink = blink; d.mouth = mouth; d.offline = offline;
