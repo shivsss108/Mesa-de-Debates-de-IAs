@@ -49,6 +49,10 @@ function semFonte(d: Dossie, id: string): Dossie {
   };
 }
 
+/** o que muda o resultado da pesquisa: se mudou, o dossiê guardado não vale */
+const assinatura = (cfg: DebateConfig, r: Repertorio) =>
+  JSON.stringify([cfg.tema, cfg.idioma, cfg.moderador.provider, cfg.moderador.model, r.busca, r.links, r.textos, r.modo]);
+
 export default function PreparoPage() {
   const router = useRouter();
   const [config, setConfig] = useState<DebateConfig>();
@@ -108,16 +112,16 @@ export default function PreparoPage() {
     setConfig(cfg);
     setRep(r);
     setKeys(k);
-    const salvo = readSession<{ tema: string; dossie: Dossie }>('mesa:dossie');
-    if (salvo?.tema === cfg.tema && salvo.dossie) setDossie(salvo.dossie);
+    const salvo = readSession<{ tema: string; sig?: string; dossie: Dossie }>('mesa:dossie');
+    if (salvo?.tema === cfg.tema && salvo.sig === assinatura(cfg, r) && salvo.dossie) setDossie(salvo.dossie);
     else void research(cfg, r, k);
     return () => abort.current?.abort();
   }, [router, research]);
 
   // guarda as edições: recarregar não pesquisa de novo
   useEffect(() => {
-    if (config && dossie) writeSession('mesa:dossie', { tema: config.tema, dossie });
-  }, [config, dossie]);
+    if (config && rep && dossie) writeSession('mesa:dossie', { tema: config.tema, sig: assinatura(config, rep), dossie });
+  }, [config, rep, dossie]);
 
   if (!config || !rep) return null;
 
