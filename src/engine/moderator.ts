@@ -4,7 +4,7 @@ import type { DebateConfig, DebateState } from '@/types';
 export type ModeratorDecision = { acao: 'passar_palavra' | 'provocar' | 'encerrar'; para?: string; fala: string };
 
 /** Extrai o 1º objeto JSON balanceado do texto (tolera ```json e texto ao redor). */
-function firstJsonObject(raw: string): unknown {
+export function firstJsonObject(raw: string): unknown {
   for (let start = raw.indexOf('{'); start !== -1; start = raw.indexOf('{', start + 1)) {
     let depth = 0;
     let inStr = false;
