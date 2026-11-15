@@ -91,7 +91,7 @@ export function buildMemberMessages(
     '  Exemplo: [duvida|apontar|alvo:' + (others[0]?.id ?? 'ninguem') + '|posição:-0.7] Seu texto aqui.',
     '- Seu conhecimento pode estar desatualizado. Para fatos recentes, use só o repertório. Se algo não está nele, diga que não sabe ou deixe claro que é opinião. Nunca invente datas, números ou declarações.',
     '- Não cite códigos de fonte como "(S2)" na fala; fale naturalmente.',
-    busca ? '- Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>].' : '',
+    busca ? '- Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>], sem a tag de emoção e sem mais nada.' : '',
     resolveExpertise(seat.expertise).promptSnippet,
     resolveTemperamento(seat.temperamento).promptSnippet,
   ]

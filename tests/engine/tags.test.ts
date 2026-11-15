@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSearchTag, parseTag, TagStreamSplitter } from '@/engine/tags';
+import { parseSearchTag, parseTag, SearchTagFilter, stripSearchTags, TagStreamSplitter } from '@/engine/tags';
 
 const ids = ['m1', 'm2'];
 
@@ -73,5 +73,25 @@ describe('parseSearchTag', () => {
     expect(parseSearchTag('texto [busca: x]')).toBeNull();
     expect(parseSearchTag('[busca:   ]')).toBeNull();
     expect(parseSearchTag('[busca: sem fechar')).toBeNull();
+  });
+});
+
+describe('stripSearchTags / SearchTagFilter', () => {
+  it('remove [busca…] fechado ou cortado', () => {
+    expect(stripSearchTags('Antes [busca: x] depois')).toBe('Antes depois');
+    expect(stripSearchTags('Texto [BUSCA: q')).toBe('Texto');
+    expect(stripSearchTags('[busca: q]')).toBe('');
+    expect(stripSearchTags('a [nota] b')).toBe('a [nota] b');
+  });
+  it('stream: segura "[bu", descarta a busca, solta o resto', () => {
+    const f = new SearchTagFilter();
+    expect(f.push('a [b')).toBe('a ');
+    expect(f.push('usca: x]')).toBe('');
+    expect(f.push(' b [nota] c [bo')).toBe(' b [nota] c [bo');
+    expect(f.push(' [bu')).toBe(' ');
+    expect(f.flush()).toBe('[bu');
+    const g = new SearchTagFilter();
+    expect(g.push('x [busca: sem fim')).toBe('x ');
+    expect(g.flush()).toBe('');
   });
 });

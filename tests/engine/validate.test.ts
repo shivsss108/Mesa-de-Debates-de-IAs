@@ -56,7 +56,7 @@ describe('validateStepBody + repertório extra (vem do cliente)', () => {
   const fonte = (over: object = {}) => ({ id: 'S1', titulo: 't', origem: 'membro', porMembro: 'm1', ...over });
   const withState = (over: object) => validateStepBody({ ...body(cfg), state: { ...createInitialState(cfg, 0), ...over } });
   it('aceita fontes válidas e buscas no limite', () =>
-    expect(withState({ repertorioExtra: { fontes: [fonte({ resumo: 'r'.repeat(300) })] }, buscasFeitas: 6 }).ok).toBe(true));
+    expect(withState({ repertorioExtra: { fontes: [fonte({ resumo: 'r'.repeat(300), veiculo: 'v'.repeat(80), url: 'u'.repeat(500), data: 'd'.repeat(40), porMembro: 'p'.repeat(40) })] }, buscasFeitas: 6 }).ok).toBe(true));
   it('campos ausentes (cliente antigo) viram vazio/0', () => {
     const st = createInitialState(cfg, 0) as Partial<ReturnType<typeof createInitialState>>;
     delete st.repertorioExtra;
@@ -70,6 +70,8 @@ describe('validateStepBody + repertório extra (vem do cliente)', () => {
       null, { fontes: 'x' }, { fontes: Array.from({ length: 25 }, (_, i) => fonte({ id: `S${i}` })) },
       { fontes: [fonte({ titulo: 't'.repeat(121) })] }, { fontes: [fonte({ resumo: 'r'.repeat(301) })] },
       { fontes: [fonte({ origem: 'x' })] }, { fontes: [fonte({ id: 5 })] }, { fontes: [fonte({ url: 5 })] },
+      { fontes: [fonte({ veiculo: 'v'.repeat(81) })] }, { fontes: [fonte({ url: 'u'.repeat(501) })] },
+      { fontes: [fonte({ data: 'd'.repeat(41) })] }, { fontes: [fonte({ porMembro: 'p'.repeat(41) })] },
     ])
       expect(withState({ repertorioExtra }).ok).toBe(false);
   });

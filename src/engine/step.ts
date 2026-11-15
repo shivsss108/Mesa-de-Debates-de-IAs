@@ -6,7 +6,7 @@ import { MAX_BUSCAS, MODERATOR_ID, offlineIds } from '@/types';
 import type { DebateConfig, DebateEvent, DebateState, Fonte, ProviderId } from '@/types';
 import { quickSearch } from '@/research/quickSearch';
 import type { NewsItem } from '@/research/search';
-import { parseSearchTag, parseTag, TagStreamSplitter, type ParsedTag } from './tags';
+import { parseSearchTag, parseTag, SearchTagFilter, stripSearchTags, TagStreamSplitter, type ParsedTag } from './tags';
 import { computeHands } from './urge';
 import { buildClosingMessages, buildMemberMessages, buildModeratorMessages, buildSummaryMessages } from './prompts';
 import { parseClosing, parseModeratorDecision, resolveTarget, type ModeratorDecision } from './moderator';
@@ -172,6 +172,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     let lastErr: unknown;
     for (let i = 0; i < BACKOFF_MS.length && !turn; i++) {
       const splitter = new TagStreamSplitter();
+      const filter = new SearchTagFilter();
+      let head = ''; // texto visível depois da tag inicial, enquanto o turno não começou
       let raw = '';
       let fed = 0;
       let started = false;
@@ -184,10 +186,11 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
           raw += chunk;
           const visible = afterThink(raw);
           if (visible === null) continue; // ainda dentro de <think>: não vai para o balão
-          let out = splitter.push(visible.slice(fed));
+          const split = splitter.push(visible.slice(fed));
           fed = visible.length;
-          // o splitter segura o "[...]" inicial: decide a busca antes de qualquer token
-          if (allowSearch && !started && (query = parseSearchTag(splitter.tagRaw() ?? ''))) break;
+          // splitter e filtro seguram "[busca…": a busca (logo no início ou logo após a tag de emoção) é decidida antes de qualquer token
+          if (allowSearch && !started && (query = parseSearchTag(splitter.tagRaw() ?? '') ?? parseSearchTag((head += split)))) break;
+          let out = filter.push(split);
           if (!started) {
             out = out.trimStart();
             if (!out) continue;
@@ -202,6 +205,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         errored = true;
         lastErr = e;
       }
+      const tail = query ? '' : filter.flush();
+      if (started && tail) yield { type: 'token', speaker: m, text: tail };
       if (query) {
         allowSearch = false;
         yield { type: 'research', member: m, query };
@@ -213,9 +218,9 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
           id: `S${++k}`,
           titulo: n.titulo.slice(0, 120),
           ...(n.resumo ? { resumo: n.resumo.slice(0, 300) } : {}),
-          ...(n.veiculo ? { veiculo: n.veiculo } : {}),
-          ...(n.url ? { url: n.url } : {}),
-          ...(n.data ? { data: n.data } : {}),
+          ...(n.veiculo ? { veiculo: n.veiculo.slice(0, 80) } : {}),
+          ...(n.url && n.url.length <= 500 ? { url: n.url } : {}), // URL cortada não serve: sem URL
+          ...(n.data ? { data: n.data.slice(0, 40) } : {}),
           origem: 'membro',
           porMembro: m,
         }));
@@ -227,6 +232,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         continue;
       }
       const p = parseTag(afterThink(raw) ?? '', others);
+      p.text = stripSearchTags(p.text);
       // ponytail: stream que cai depois de já ter mostrado texto vira um turno truncado (evita turn_start sem turn_end)
       if (p.text && (started || !errored)) {
         // o splitter não tem flush: se ainda segurava um "[..." sem fechar, solta agora

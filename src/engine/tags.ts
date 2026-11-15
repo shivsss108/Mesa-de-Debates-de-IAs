@@ -43,6 +43,46 @@ export function parseSearchTag(raw: string): string | null {
   return SEARCH_RE.exec(raw)?.[1].trim().slice(0, 120) || null;
 }
 
+/** Remove todo fragmento `[busca…` (fechado ou cortado no fim) de um texto de turno. */
+export function stripSearchTags(s: string): string {
+  return s.replace(/\[busca[^\]]*(?:\]\s*|$)/gi, '').trim();
+}
+
+/** Filtro de stream: segura todo "[" que pode virar "[busca" e descarta o fragmento; nunca deixa "[busca" passar. */
+export class SearchTagFilter {
+  private buf = '';
+
+  push(chunk: string): string {
+    this.buf += chunk;
+    let out = '';
+    for (;;) {
+      const i = this.buf.indexOf('[');
+      if (i < 0) break;
+      out += this.buf.slice(0, i);
+      this.buf = this.buf.slice(i);
+      const head = this.buf.slice(0, 6).toLowerCase();
+      if (!'[busca'.startsWith(head)) {
+        out += '[';
+        this.buf = this.buf.slice(1);
+        continue;
+      }
+      const end = this.buf.indexOf(']');
+      if (head.length < 6 || end < 0) return out; // "[bu" ou "[busca…" sem fechar: segura
+      this.buf = this.buf.slice(end + 1);
+    }
+    out += this.buf;
+    this.buf = '';
+    return out;
+  }
+
+  /** Fim do stream: um "[bu" que não virou busca volta; um "[busca…" sem fechar some. */
+  flush(): string {
+    const b = this.buf;
+    this.buf = '';
+    return /^\[busca/i.test(b) ? '' : b;
+  }
+}
+
 /** Holds the stream start until the tag closes with `]` (or 200 chars without it). */
 export class TagStreamSplitter {
   private buf = '';

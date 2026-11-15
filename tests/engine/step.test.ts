@@ -389,7 +389,7 @@ describe('createInitialState', () => {
 });
 
 describe('membros pesquisam', () => {
-  const RULE = 'Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>].';
+  const RULE = 'Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>], sem a tag de emoção e sem mais nada.';
   const pesq: DebateConfig = {
     ...cfg,
     membrosPesquisam: true,
@@ -457,6 +457,32 @@ describe('membros pesquisam', () => {
       expect(search).not.toHaveBeenCalled();
       expect(events.some((e) => e.type === 'research')).toBe(false);
       expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm1')).toMatchObject({ fullText: 'Texto.' });
+    }
+  });
+
+  const m1Tokens = (evs: DebateEvent[]) => evs.filter((e) => e.type === 'token' && e.speaker === 'm1').map((e) => (e as { text: string }).text);
+
+  it('tag de emoção seguida de [busca: q] também busca, sem vazar token', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': [['[pensativo|apontar|alvo:ninguem|posição:0] [bu', 'sca: juros hoje] x'], 'Ok.'] });
+    const search = vi.fn(async () => [item('T')]);
+    const { events, state } = await run(pesq, fresh(), makeDeps(chat, { search }).deps);
+    expect(search).toHaveBeenCalledWith('juros hoje', 'pt-BR');
+    expect(m1Tokens(events).join('')).toBe('Ok.');
+    expect(state.buscasFeitas).toBe(1);
+  });
+
+  it('prosa + [busca: x] ou [busca sem fechar: nunca vai para token nem fullText', async () => {
+    for (const [reply, full] of [
+      [['Preciso checar. [bu', 'sca: x] Depois.'], 'Preciso checar. Depois.'],
+      [['Texto [busca: q'], 'Texto'],
+      [['Fim [bu'], 'Fim [bu'], // "[bu" que termina o stream não é busca: volta ao texto
+    ] as const) {
+      const { chat } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': [[...reply]] });
+      const search = vi.fn(async () => [item('T')]);
+      const { events } = await run(pesq, fresh(), makeDeps(chat, { search }).deps);
+      expect(search).not.toHaveBeenCalled();
+      expect(m1Tokens(events).some((t) => /\[busca/i.test(t))).toBe(false);
+      expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm1')).toMatchObject({ fullText: full });
     }
   });
 

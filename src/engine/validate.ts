@@ -14,9 +14,14 @@ const MODOS = ['todos', 'dividido', 'recorte'];
 const ORIGENS = ['web', 'link', 'arquivo', 'texto', 'membro'];
 const txt = (v: unknown, max: number) => typeof v === 'string' && v.length <= max;
 const optStr = (v: unknown) => v === undefined || typeof v === 'string';
-const fonteOk = (f: unknown, tituloMax = Infinity) =>
-  isObj(f) && str(f.id) && txt(f.titulo, tituloMax) && ORIGENS.includes(f.origem as string) &&
-  (f.resumo === undefined || txt(f.resumo, 300)) && [f.veiculo, f.url, f.data, f.porMembro].every(optStr);
+const optTxt = (v: unknown, max: number) => v === undefined || txt(v, max);
+/** `extra`: fonte do repertório de buscas (limites apertados; o dossiê traz URLs longas da pesquisa). */
+const fonteOk = (f: unknown, extra = false) =>
+  isObj(f) && str(f.id) && txt(f.titulo, extra ? 120 : Infinity) && ORIGENS.includes(f.origem as string) &&
+  optTxt(f.resumo, 300) &&
+  (extra
+    ? optTxt(f.veiculo, 80) && optTxt(f.url, 500) && optTxt(f.data, 40) && optTxt(f.porMembro, 40)
+    : [f.veiculo, f.url, f.data, f.porMembro].every(optStr));
 
 /** Mensagem de erro, ou null se o dossiê é válido (limites da spec §3). */
 export function validateDossie(d: unknown): string | null {
@@ -67,7 +72,7 @@ export function validateStepBody(body: unknown): { ok: true; value: StepBody } |
   if (!isObj(state) || !Array.isArray(state.history) || !isObj(state.lastCallAt)) return bad('Estado inválido.');
   // repertório e contador vêm do cliente a cada passo; ausentes (cliente antigo) = vazio/0
   const repertorioExtra = state.repertorioExtra === undefined ? { fontes: [] } : state.repertorioExtra;
-  if (!isObj(repertorioExtra) || !Array.isArray(repertorioExtra.fontes) || repertorioExtra.fontes.length > 24 || !repertorioExtra.fontes.every((f) => fonteOk(f, 120)))
+  if (!isObj(repertorioExtra) || !Array.isArray(repertorioExtra.fontes) || repertorioExtra.fontes.length > 24 || !repertorioExtra.fontes.every((f) => fonteOk(f, true)))
     return bad('Repertório inválido.');
   const buscasFeitas = state.buscasFeitas === undefined ? 0 : state.buscasFeitas;
   if (!Number.isInteger(buscasFeitas) || (buscasFeitas as number) < 0 || (buscasFeitas as number) > MAX_BUSCAS)
