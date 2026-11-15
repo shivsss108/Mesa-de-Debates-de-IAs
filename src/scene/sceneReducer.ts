@@ -15,6 +15,8 @@ export interface SceneState {
   members: Record<string, MemberView>;
   speaker?: string;
   addressedTo?: string;
+  /** seq do turn_start atual: o balão só mostra a fala cujo turn_end veio depois dele */
+  turnSeq: number;
   bubble: string;
   transcript: { speaker: string; text: string }[];
   hands: HandEntry[];
@@ -24,7 +26,7 @@ export interface SceneState {
   error?: string;
 }
 
-export const initialScene: SceneState = { members: {}, bubble: '', transcript: [], hands: [], memberTurns: 0, summary: '' };
+export const initialScene: SceneState = { members: {}, turnSeq: -1, bubble: '', transcript: [], hands: [], memberTurns: 0, summary: '' };
 
 const newMember = (id: string): MemberView => ({ id, emotion: 'neutro', stance: 0, status: 'ok', handUp: false });
 
@@ -41,7 +43,7 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
         members: Object.fromEntries([MODERATOR_ID, ...e.config.seats.map((x) => x.id)].map((id) => [id, newMember(id)])),
       };
     case 'turn_start':
-      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, bubble: '' };
+      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, turnSeq: e.seq, bubble: '' };
     case 'token':
       return { ...s, bubble: s.bubble + e.text };
     case 'turn_end':

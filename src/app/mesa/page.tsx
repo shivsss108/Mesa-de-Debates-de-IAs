@@ -46,6 +46,7 @@ function ReplayRun({ replay }: { replay: Replay }) {
   const v = useVoice();
   const r = useReplay(replay, v.waitFor);
   v.config.current = r.scene.config;
+  v.speed.current = r.speed;
   return (
     <>
       <Stage scene={r.scene} defaultCamera="diretor"
@@ -69,6 +70,7 @@ function Live() {
   const v = useVoice();
   const d = useLiveDebate(v.waitFor);
   v.config.current = d.scene.config;
+  v.speed.current = d.speed;
   const { start, stop } = d;
   const [ready, setReady] = useState(false);
   useEffect(() => {

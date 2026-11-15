@@ -20,8 +20,8 @@ export function assignVoices(memberIds: string[], voices: SpeechSynthesisVoice[]
   return out;
 }
 
-/** Fala o texto; resolve em onend/onerror ou após max(4s, palavras*600ms) (alguns navegadores perdem onend). */
-export function speak(text: string, profile: VoiceProfile, lang = 'pt-BR'): Promise<void> {
+/** Fala o texto; resolve em onend/onerror ou após max(4s, palavras*600ms) (alguns navegadores perdem onend). `onWord` recebe o charIndex de cada palavra. */
+export function speak(text: string, profile: VoiceProfile, lang = 'pt-BR', onWord?: (charIndex: number) => void): Promise<void> {
   if (typeof globalThis.speechSynthesis === 'undefined') return Promise.resolve();
   return new Promise<void>((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
@@ -30,11 +30,12 @@ export function speak(text: string, profile: VoiceProfile, lang = 'pt-BR'): Prom
     u.pitch = profile.pitch;
     u.rate = profile.rate;
     const words = text.trim().split(/\s+/).length;
-    const timer = setTimeout(done, Math.max(4000, words * 600));
+    const timer = setTimeout(done, Math.max(4000, (words * 600) / profile.rate));
     function done() {
       clearTimeout(timer);
       resolve();
     }
+    if (onWord) u.onboundary = (ev) => { if (ev.name === 'word') onWord(ev.charIndex); };
     u.onend = done;
     u.onerror = done;
     globalThis.speechSynthesis.speak(u);

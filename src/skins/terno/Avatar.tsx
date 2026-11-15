@@ -4,7 +4,8 @@ import { useFrame } from '@react-three/fiber';
 import { Outlines } from '@react-three/drei';
 import { dampE } from 'maath/easing';
 import * as THREE from 'three';
-import type { Emotion } from '@/types';
+import { MODERATOR_ID, type Emotion } from '@/types';
+import { mouthOpen } from '@/voice/speech';
 import { resolveTemperamento } from '@/presets/temperamentos';
 import { resolveExpertise, type Expertise } from '@/presets/expertises';
 import type { Skin } from '@/skins/types';
@@ -29,6 +30,7 @@ const GRAY = new THREE.MeshToonMaterial({ color: '#8d969b' });
 
 export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = false, speakerStance }: AvatarProps) {
   const moderator = seat === 'moderador';
+  const id = moderator ? MODERATOR_ID : seat.id;
   const tie = moderator ? '#ffffff' : resolveTemperamento(seat.temperamento).corGravata;
   const acessorio = moderator ? undefined : accessoryOf(resolveExpertise(seat.expertise));
 
@@ -93,7 +95,8 @@ export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = fal
     if (now > st.nextBlink + BLINK_MS) st.nextBlink = now + 3000 + Math.random() * 3000;
     const blink = now >= st.nextBlink;
     const offline = view.status === 'sem_sinal';
-    const mouth = isSpeaker && view.status === 'ok' ? Math.round((0.5 + 0.5 * Math.sin(t * 14)) * 3) / 3 : 0;
+    // boca segue o relógio de fala (uma abertura por palavra); `status` não entra: membros ficam 'pensando' até depois do turn_end
+    const mouth = isSpeaker && !offline ? mouthOpen(id, now) : 0;
     const d = st.drawn;
     const changed = offline || d.emotion !== view.emotion || d.blink !== blink || d.mouth !== mouth || d.offline !== offline;
     if (changed && now - st.lastDraw >= FACE_MS) {

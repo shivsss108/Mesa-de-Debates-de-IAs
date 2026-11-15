@@ -28,6 +28,7 @@ describe('sceneReducer', () => {
     ]);
     let s = events.reduce(sceneReducer, initialScene);
     expect(s.speaker).toBe('m1');
+    expect(s.turnSeq).toBe(5); // seq do turn_start de m1: o balão só mostra falas posteriores
     expect(s.bubble).toBe('Oi');
     expect(Object.keys(s.members).sort()).toEqual(['m1', 'm2', 'moderador']);
 
@@ -59,6 +60,7 @@ describe('sceneReducer', () => {
     expect(s.members.m1.handUp).toBe(false);
   });
 });
+
 describe('status com motivo', () => {
   it('sem_sinal com reason aparece na transcrição', () => {
     const s = sceneReducer(initialScene, { seq: 0, t: 1, type: 'status', member: 'm1', state: 'sem_sinal', reason: 'resposta vazia do modelo' });

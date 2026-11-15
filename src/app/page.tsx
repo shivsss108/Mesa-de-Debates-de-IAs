@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useReplay } from '@/client/useLiveDebate';
+import { useVoice } from '@/voice/useVoice';
 import { parseReplay, type Replay } from '@/client/replay';
 import { Mascote } from './Mascote';
 import styles from './page.module.css';
@@ -11,7 +12,7 @@ const Stage = dynamic(() => import('@/scene/Stage').then((m) => m.Stage), { ssr:
 const noop = () => {};
 
 function DemoLoop({ replay }: { replay: Replay }) {
-  const r = useReplay(replay);
+  const r = useReplay(replay, useVoice().waitFor); // fala simulada: a boca mexe no fundo da tela inicial
   const { restart } = r;
   const ended = !!r.scene.ended;
   useEffect(() => {

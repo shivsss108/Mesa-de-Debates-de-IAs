@@ -1,14 +1,16 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MODERATOR_ID, type DebateConfig, type DebateEvent } from '@/types';
-import { assignVoices, speak, voicesAvailable } from '@/voice/voice';
+import { assignVoices, voicesAvailable } from '@/voice/voice';
+import { cancelSpeech, say } from '@/voice/speech';
 
-/** Voz opcional: `waitFor` fala o turn_end quando ligada; `config` é preenchido pela página a partir da cena. */
+/** `waitFor` fala cada turn_end (voz do navegador se ligada, senão fala simulada); `config` e `speed` são preenchidos pela página. */
 export function useVoice() {
   const [on, setOn] = useState(false);
   const [available, setAvailable] = useState(false);
   const onRef = useRef(false);
   const config = useRef<DebateConfig | undefined>(undefined);
+  const speed = useRef(1);
 
   useEffect(() => {
     const ss = globalThis.speechSynthesis;
@@ -21,6 +23,7 @@ export function useVoice() {
       ss.cancel(); // sair da página cala a fala
     };
   }, []);
+  useEffect(() => cancelSpeech, []); // sair da página também para a fala simulada
 
   const toggle = useCallback(() => {
     onRef.current = !onRef.current;
@@ -29,12 +32,13 @@ export function useVoice() {
   }, []);
 
   const waitFor = useCallback(async (e: DebateEvent) => {
+    if (e.type !== 'turn_end') return;
     const c = config.current;
-    if (!onRef.current || !c || e.type !== 'turn_end') return;
-    const ids = [...c.seats.map((s) => s.id), MODERATOR_ID];
-    const profile = assignVoices(ids, globalThis.speechSynthesis.getVoices(), c.idioma || 'pt-BR')[e.speaker];
-    if (profile) await speak(e.fullText, profile, c.idioma || 'pt-BR');
+    const lang = c?.idioma || 'pt-BR';
+    const ids = c ? [...c.seats.map((s) => s.id), MODERATOR_ID] : [];
+    const profile = onRef.current && c ? assignVoices(ids, globalThis.speechSynthesis.getVoices(), lang)[e.speaker] : undefined;
+    await say({ seq: e.seq, speaker: e.speaker, text: e.fullText }, { profile, lang, speed: () => speed.current });
   }, []);
 
-  return { on, available, toggle, waitFor, config };
+  return { on, available, toggle, waitFor, config, speed };
 }
