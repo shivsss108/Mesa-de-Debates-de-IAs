@@ -9,7 +9,11 @@ const BUDGET = 20_000; // total de caracteres de fonte no prompt (cabe no TPM gr
 const STATUS = ['confirmada', 'nao_encontrada', 'contradita'] as const;
 const FALLBACK_NOTA = 'Não foi possível sintetizar as fontes.';
 
-const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+/** Impede que texto da fonte abra/feche delimitadores (prompt injection, spec 7.2). */
+const defang = (s: string) => s.replaceAll('<<<', '‹‹‹').replaceAll('>>>', '›››');
+const line = (s: string) => defang(s).replace(/\s+/g, ' ').trim();
+
+const str =(v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
 function parse(raw: string, ids: Set<string>): Saida | null {
   const o = firstJsonObject(raw) as Record<string, unknown> | null;
@@ -47,7 +51,7 @@ export async function synthesize(
   const [y, m, d] = hoje.split('-');
   const share = Math.floor(BUDGET / Math.max(fontes.length, 1));
   const blocos = fontes
-    .map((f) => `<<<FONTE ${f.id} | ${f.titulo} | ${f.veiculo ?? 'sem veículo'}>>>\n${f.conteudo.slice(0, share)}\n<<<FIM ${f.id}>>>`)
+    .map((f) => `<<<FONTE ${f.id} | ${line(f.titulo)} | ${line(f.veiculo ?? 'sem veículo')}>>>\n${defang(f.conteudo.slice(0, share))}\n<<<FIM ${f.id}>>>`)
     .join('\n\n');
   const messages = [
     {
