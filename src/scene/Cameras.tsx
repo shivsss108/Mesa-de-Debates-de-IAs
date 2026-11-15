@@ -5,7 +5,7 @@ import { OrbitControls, PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
-import { roomSize } from '@/scene/Room';
+import { studioSize } from '@/scene/layout';
 import { typingTarget } from '@/scene/keys';
 
 export type CameraMode = 'diretor' | 'orbita' | 'livre';
@@ -25,7 +25,7 @@ export function Cameras({ mode, scene, posOf, radius }: Props) {
   return (
     <>
       {mode === 'orbita' && <OrbitCam radius={radius} />}
-      {mode === 'livre' && <FreeCam limit={roomSize(radius) / 2 - 0.5} />}
+      {mode === 'livre' && <FreeCam limit={studioSize(radius) / 2 - 0.5} />}
       {mode === 'diretor' && <DirectorCam scene={scene} posOf={posOf} radius={radius} />}
     </>
   );
@@ -37,7 +37,7 @@ function OrbitCam({ radius }: { radius: number }) {
     camera.position.set(0, 3.2, radius + 3); // plano aberto ao entrar na órbita
   }, [camera, radius]);
   return (
-    <OrbitControls makeDefault target={[0, 0.8, 0]} minDistance={2} maxDistance={Math.min(9, roomSize(radius) / 2 - 0.5)} maxPolarAngle={Math.PI / 2 - 0.05} />
+    <OrbitControls makeDefault target={[0, 0.8, 0]} minDistance={2} maxDistance={Math.min(9, studioSize(radius) / 2 + 1.5)} maxPolarAngle={Math.PI / 2 - 0.05} />
   );
 }
 

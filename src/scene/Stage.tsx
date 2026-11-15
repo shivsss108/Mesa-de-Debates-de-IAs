@@ -8,8 +8,7 @@ import type { Skin } from '@/skins/types';
 import { ternoSkin } from '@/skins/terno';
 import { looksFor } from '@/skins/terno/look';
 import { defaultRadius, seatPositions } from '@/scene/layout';
-import { Room, roomSize } from '@/scene/Room';
-import { Table } from '@/scene/Table';
+import { Studio } from '@/scene/Studio';
 import { Cameras, type CameraMode } from '@/scene/Cameras';
 import { Hud, type StageControls } from '@/scene/Hud';
 import { BubbleAnchor, SpeechBubble } from '@/scene/SpeechBubble';
@@ -28,6 +27,19 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
   const cycle = () => setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
 
   useEffect(cancelSpeech, [scene.config]); // novo debate/replay: esquece a fala do anterior
+
+  // relógio do programa (telão): zera a cada debate_start, tique de 1 s
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const t0 = performance.now();
+    const id = setInterval(() => setElapsedMs(performance.now() - t0), 1000);
+    return () => {
+      clearInterval(id);
+      setElapsedMs(0);
+    };
+  }, [scene.config]);
+
+  const [debug] = useState(() => location.search.includes('debug')); // Stage só roda no cliente (dynamic ssr:false)
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -51,12 +63,10 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
   const Avatar = skin.Avatar;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0f2a2e' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#0b1426' }}>
       <Canvas camera={{ position: [0, 3.2, radius + 3], fov: 55 }} dpr={[1, 2]}>
-        <ambientLight intensity={1.2} color="#9fc9cc" />
-        <pointLight position={[0, 3, 0]} color="#ffb870" intensity={8} distance={0} decay={2} />
-        <Room size={roomSize(radius)} />
-        <Table radius={radius - 0.55} />
+        <color attach="background" args={['#0b1426']} />
+        <Studio radius={radius} seats={seats} speakerId={scene.speaker} elapsedMs={elapsedMs} scene={scene} />
         {ids.map((id, i) => {
           const view = scene.members[id];
           if (!view) return null;
@@ -77,7 +87,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
           <BubbleAnchor position={[speakerPos[0], 2.3, speakerPos[2]]} target={bubbleRef} />
         )}
         <Cameras mode={mode} scene={scene} posOf={posOf} radius={radius} />
-        {process.env.NODE_ENV === 'development' && <Stats />}
+        {debug && <Stats />}
       </Canvas>
       {!bare && <SpeechBubble speaker={scene.speaker} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} anchorRef={bubbleRef} />}
       {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}
