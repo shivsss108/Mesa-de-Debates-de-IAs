@@ -76,7 +76,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
         <Cameras mode={mode} scene={scene} posOf={posOf} radius={radius} />
         {process.env.NODE_ENV === 'development' && <Stats />}
       </Canvas>
-      {!bare && <SpeechBubble speaker={scene.speaker} turnSeq={scene.turnSeq} anchorRef={bubbleRef} />}
+      {!bare && <SpeechBubble speaker={scene.speaker} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} anchorRef={bubbleRef} />}
       {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}
       {!bare && <Transcript scene={scene} />}
     </div>

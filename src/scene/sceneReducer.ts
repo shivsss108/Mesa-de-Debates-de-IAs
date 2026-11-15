@@ -1,5 +1,5 @@
 import { MODERATOR_ID } from '@/types';
-import type { DebateConfig, DebateEvent, Emotion, Gesture, HandEntry } from '@/types';
+import type { DebateConfig, DebateEvent, Emotion, Fonte, Gesture, HandEntry } from '@/types';
 
 export interface MemberView {
   id: string;
@@ -22,11 +22,15 @@ export interface SceneState {
   hands: HandEntry[];
   memberTurns: number;
   summary: string;
+  /** query em andamento (membro pesquisando); limpa no turn_start */
+  searching?: string;
+  /** fontes que membros buscaram durante o debate */
+  extraSources: Fonte[];
   ended?: Extract<DebateEvent, { type: 'debate_end' }>;
   error?: string;
 }
 
-export const initialScene: SceneState = { members: {}, turnSeq: -1, bubble: '', transcript: [], hands: [], memberTurns: 0, summary: '' };
+export const initialScene: SceneState = { members: {}, turnSeq: -1, bubble: '', transcript: [], hands: [], memberTurns: 0, summary: '', extraSources: [] };
 
 const newMember = (id: string): MemberView => ({ id, emotion: 'neutro', stance: 0, status: 'ok', handUp: false });
 
@@ -43,7 +47,7 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
         members: Object.fromEntries([MODERATOR_ID, ...e.config.seats.map((x) => x.id)].map((id) => [id, newMember(id)])),
       };
     case 'turn_start':
-      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, turnSeq: e.seq, bubble: '' };
+      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, turnSeq: e.seq, bubble: '', searching: undefined };
     case 'token':
       return { ...s, bubble: s.bubble + e.text };
     case 'turn_end':
@@ -73,7 +77,8 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
     case 'debate_end':
       return { ...s, ended: e, speaker: undefined, addressedTo: undefined, bubble: '' };
     case 'research':
-      return s;
+      if (!e.fontes) return { ...patch(s, e.member, { emotion: 'pensativo' }), speaker: e.member, turnSeq: e.seq, bubble: '', searching: e.query };
+      return { ...s, extraSources: [...s.extraSources, ...e.fontes] };
     case 'error':
       return { ...s, error: e.message };
   }

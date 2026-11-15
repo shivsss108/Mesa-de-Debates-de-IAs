@@ -19,14 +19,14 @@ export function BubbleAnchor({ position, target }: { position: [number, number, 
 }
 
 /** Balão acima da cabeça do orador; ~4 linhas visíveis, com rolagem. Revela o texto no ritmo do relógio de fala. Posicionado por BubbleAnchor. */
-export function SpeechBubble({ speaker, turnSeq, anchorRef }: { speaker?: string; turnSeq: number; anchorRef: RefObject<HTMLDivElement | null> }) {
+export function SpeechBubble({ speaker, turnSeq, anchorRef, override }: { speaker?: string; turnSeq: number; override?: string; anchorRef: RefObject<HTMLDivElement | null> }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!speaker) return;
     let raf = 0;
     const tick = () => {
       const el = ref.current;
-      const text = bubbleText(speaker, turnSeq);
+      const text = override ?? bubbleText(speaker, turnSeq);
       if (el && el.textContent !== text) {
         el.textContent = text;
         el.scrollTo({ top: el.scrollHeight });
@@ -35,7 +35,7 @@ export function SpeechBubble({ speaker, turnSeq, anchorRef }: { speaker?: string
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [speaker, turnSeq]);
+  }, [speaker, turnSeq, override]);
   return (
     <div ref={anchorRef} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 5, display: speaker ? 'block' : 'none' }}>
       <div

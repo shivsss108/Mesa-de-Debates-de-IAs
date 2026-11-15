@@ -66,4 +66,24 @@ describe('status com motivo', () => {
     const s = sceneReducer(initialScene, { seq: 0, t: 1, type: 'status', member: 'm1', state: 'sem_sinal', reason: 'resposta vazia do modelo' });
     expect(s.transcript.at(-1)).toEqual({ speaker: 'm1', text: '(não respondeu: resposta vazia do modelo)' });
   });
+  it('research: busca em cena, acumula extras e limpa no turn_start', () => {
+    const fonte = { id: 'S7', titulo: 'x', origem: 'membro' as const, porMembro: 'm1' };
+    const evs = seqd([
+      { type: 'debate_start', config },
+      { type: 'research', member: 'm1', query: 'q' },
+    ]);
+    let s = evs.reduce(sceneReducer, initialScene);
+    expect(s.speaker).toBe('m1');
+    expect(s.turnSeq).toBe(1);
+    expect(s.searching).toBe('q');
+    expect(s.members.m1.emotion).toBe('pensativo');
+    s = sceneReducer(s, { seq: 2, t: 20, type: 'research', member: 'm1', query: 'q', fontes: [fonte] });
+    expect(s.extraSources).toEqual([fonte]);
+    expect(s.searching).toBe('q');
+    s = sceneReducer(s, { seq: 3, t: 30, type: 'turn_start', speaker: 'm1' });
+    expect(s.searching).toBeUndefined();
+    expect(s.extraSources).toHaveLength(1);
+    s = sceneReducer(s, { seq: 4, t: 40, type: 'debate_start', config });
+    expect(s.extraSources).toEqual([]);
+  });
 });

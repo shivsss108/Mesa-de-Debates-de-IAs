@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DebateEvent } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
+import { Sources } from '@/scene/Sources';
 import s from './EndPanel.module.css';
 
 export function EndPanel({ scene, events, onNew }: { scene: SceneState; events: DebateEvent[]; onNew: () => void }) {
@@ -42,6 +43,12 @@ export function EndPanel({ scene, events, onNew }: { scene: SceneState; events: 
         <ul>{end.openPoints.length ? end.openPoints.map((c, i) => <li key={i}>{c}</li>) : <li>Nenhum.</li>}</ul>
         <h3>Veredito</h3>
         <p>{end.verdict}</p>
+        {(scene.config?.dossie?.fontes.length || scene.extraSources.length) ? (
+          <>
+            <h3>Fontes</h3>
+            <Sources dossie={scene.config?.dossie} extra={scene.extraSources} config={scene.config} />
+          </>
+        ) : null}
         <div className={s.actions}>
           <button type="button" className={`${s.btn} ${s.primary}`} onClick={download}>Baixar debate</button>
           <button type="button" className={s.btn} onClick={() => setOpen(false)}>Ver mesa</button>

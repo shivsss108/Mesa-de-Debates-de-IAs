@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
+import { Sources } from '@/scene/Sources';
 import { memberName } from '@/scene/names';
 import { CAMERA_LABEL, type CameraMode } from '@/scene/Cameras';
 import { PROVIDERS } from '@/providers/table';
@@ -27,7 +28,9 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
   scene: SceneState; controls: StageControls; camera: CameraMode; onCamera: () => void; hovered?: string;
 }) {
   const [paused, setPaused] = useState(false);
+  const [srcOpen, setSrcOpen] = useState(false);
   const c = scene.config;
+  const hasSources = !!c?.dossie?.fontes.length || scene.extraSources.length > 0;
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ ...panel, position: 'absolute', top: 12, left: 12, maxWidth: 360 }}>
@@ -41,6 +44,12 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
           </ul>
         )}
       </div>
+
+      {hasSources && srcOpen && (
+        <div id="painel-fontes" style={{ ...panel, position: 'absolute', bottom: 64, left: '50%', transform: 'translateX(-50%)', width: 'min(560px, 90vw)', maxHeight: '40vh', overflowY: 'auto', pointerEvents: 'auto' }}>
+          <Sources dossie={c?.dossie} extra={scene.extraSources} config={c} />
+        </div>
+      )}
 
       {hovered && <HoverCard scene={scene} id={hovered} />}
 
@@ -64,6 +73,11 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
           title={controls.voiceAvailable ? undefined : 'Seu navegador não tem voz disponível'} onClick={controls.onVoice}>
           {controls.voiceOn ? '🔊 Voz: ligada' : '🔇 Voz'}
         </button>
+        {hasSources && (
+          <button type="button" style={btn} aria-expanded={srcOpen} aria-controls="painel-fontes" onClick={() => setSrcOpen(!srcOpen)}>
+            Fontes
+          </button>
+        )}
         <button type="button" style={{ ...btn, background: '#7a2323' }} aria-label="Encerrar debate" onClick={controls.onStop}>
           Encerrar
         </button>
