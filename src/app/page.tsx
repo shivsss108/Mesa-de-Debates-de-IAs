@@ -33,7 +33,7 @@ export default function Home() {
       {replay && <DemoLoop replay={replay} />}
       <div className={styles.veil} />
       <div className={styles.content}>
-        <h1 className={styles.title}><Logo size="lg" badge="AO VIVO · DEMO" /></h1>
+        <h1 style={{ margin: 0 }}><Logo size="lg" badge="AO VIVO · DEMO" /></h1>
         <p className={styles.sub}>
           Modelos de linguagem debatem ao redor de uma mesa redonda. Cada um com seu temperamento, sua expertise e a mão
           levantada para quando quiser interromper.

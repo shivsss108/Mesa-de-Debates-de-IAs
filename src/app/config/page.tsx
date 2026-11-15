@@ -74,7 +74,7 @@ export default function ConfigPage() {
   }, []);
 
   const shown = useMemo(() => (onlyFree ? models.filter((m) => m.free) : models), [models, onlyFree]);
-  const looks = useMemo(() => looksFor(config?.seats ?? []), [config]);
+  const looks = useMemo(() => looksFor(config?.seats ?? []), [config?.seats]);
   const problems = useMemo(() => {
     const p = config ? validateConfig(config, keys, env) : [];
     return rep.links.length > 5 ? [...p, 'No máximo 5 links no repertório.'] : p;

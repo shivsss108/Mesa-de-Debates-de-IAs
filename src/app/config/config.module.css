@@ -6,8 +6,7 @@
     var(--bg);
 }
 .wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-.head { display: flex; align-items: center; gap: 12px 20px; }
-.head { flex-wrap: wrap; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .head h1 { font-family: var(--font-display), 'Arial Narrow', sans-serif; font-size: 2.2rem; line-height: 1; text-transform: uppercase; letter-spacing: .03em; }
 .head p { color: var(--muted); font-size: 14px; }
 .back { margin-left: auto; color: var(--muted); font-size: 14px; }
