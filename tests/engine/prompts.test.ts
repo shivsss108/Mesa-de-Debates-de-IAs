@@ -71,7 +71,7 @@ describe('buildModeratorMessages', () => {
 });
 
 describe('data e dossiê nos prompts', () => {
-  const NOW = new Date(2026, 0, 2, 12);
+  const NOW = new Date(Date.UTC(2026, 0, 2, 15));
   const dossie = (over: Partial<NonNullable<DebateConfig['dossie']>> = {}): NonNullable<DebateConfig['dossie']> => ({
     geradoEm: '2026-11-14',
     premissa: { status: 'confirmada', nota: 'nota-p' },
@@ -162,6 +162,37 @@ describe('data e dossiê nos prompts', () => {
     expect(abre).toContain('avise os participantes');
     const depois = text(buildModeratorMessages(c, st({ history: [{ speaker: 'm1', text: 'oi' }] })));
     expect(depois).not.toContain('avise os participantes');
+  });
+  it('buscas dos membros não expulsam os fatos revisados', async () => {
+    const { dossieBlock } = await import('@/engine/prompts');
+    const fatos = Array.from({ length: 12 }, (_, i) => ({ id: `F${i}`, texto: `fato${i}-` + 'a'.repeat(293), fontes: ['S1'] }));
+    const disputas = Array.from({ length: 5 }, (_, i) => `disputa${i}-` + 'd'.repeat(190));
+    const extras = Array.from({ length: 24 }, (_, i) => ({
+      id: `S${i + 10}`, titulo: `T${i}-` + 't'.repeat(116), resumo: 'r'.repeat(300), origem: 'membro' as const, porMembro: 'm2',
+    }));
+    const b = dossieBlock(withD(dossie({ fatos, disputas })), st({ repertorioExtra: { fontes: extras } }), 'm1');
+    expect(b.length).toBeLessThanOrEqual(4000);
+    expect(b).toContain('Premissa do tema');
+    for (let i = 0; i < 12; i++) expect(b).toContain(`fato${i}-`);
+    expect(b.split('\n').every((l) => l.length === 0 || /^(- |Repert|Premissa|Fatos:|Pontos|Pesquisado)/.test(l))).toBe(true);
+  });
+  it('extras mais novos entram primeiro; sem espaço para o resumo, vai só o título', async () => {
+    const { dossieBlock } = await import('@/engine/prompts');
+    const extras = Array.from({ length: 30 }, (_, i) => ({ id: `S${i + 10}`, titulo: `T${i}`, resumo: 'r'.repeat(300), origem: 'membro' as const, porMembro: 'm2' }));
+    const b = dossieBlock(withD(), st({ repertorioExtra: { fontes: extras } }), 'm1');
+    expect(b.length).toBeLessThanOrEqual(4000);
+    expect(b).toContain('[S39]');
+    expect(b).not.toContain('[S10]');
+  });
+  it('fato manual sem fontes não renderiza colchetes vazios', async () => {
+    const { dossieBlock } = await import('@/engine/prompts');
+    const b = dossieBlock(withD(dossie({ fatos: [{ id: 'F1', texto: 'manual-x', fontes: [], manual: true }] })), st(), 'm1');
+    expect(b).toContain('- manual-x');
+    expect(b).not.toContain('[]');
+  });
+  it('data sem dossiê usa o fuso de São Paulo', async () => {
+    const { hojeDe } = await import('@/engine/prompts');
+    expect(hojeDe(mk(), new Date('2026-11-15T01:30:00Z'))).toBe('14/11/2026');
   });
   it('bloco cortado em 4000 chars', async () => {
     const { dossieBlock } = await import('@/engine/prompts');

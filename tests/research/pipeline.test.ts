@@ -47,6 +47,35 @@ describe('runResearch', () => {
     expect(d.fontes[1]).toEqual({ id: 'S2', titulo: 'N2', veiculo: 'V2', url: 'https://s2.com/a', data: '2026-11-01', origem: 'web' });
     expect(validateDossie(d)).toBeNull();
   });
+  it('leitura curta (paywall) não vence o resumo do RSS; leitura longa vence', async () => {
+    const f = fakeChat(['["q1","q2"]', synth(['S1'])]);
+    const read = async (u: string) => (u.includes('s1.') ? 'Assine' : 'longo '.repeat(100));
+    await run({ ...base, busca: true }, f.chat, { search: async () => news(2), read }).p;
+    const prompt = f.calls[1].messages[1].content;
+    expect(prompt).toContain('resumo 1');
+    expect(prompt).not.toContain('Assine');
+    expect(prompt).toContain('longo longo');
+  });
+  it('estouro do orçamento na síntese → fallback, sem lançar; abort do chamador ainda lança', async () => {
+    const hang: LlmTarget['chat'] = async function* (req) {
+      await new Promise((_, rej) => {
+        if (req.signal?.aborted) rej(new Error('abortado'));
+        req.signal?.addEventListener('abort', () => rej(new Error('abortado')));
+      });
+      yield '';
+    };
+    const d = await run({ ...base, textos: [{ nome: 'nota', conteudo: 'abc' }] }, hang, { budgetMs: 20 }).p;
+    expect(d.premissa.status).toBe('nao_encontrada');
+    expect(d.fatos).toEqual([{ id: 'F1', texto: 'abc', fontes: ['S1'] }]);
+    const ac = new AbortController();
+    const p = runResearch({ ...base, textos: [{ nome: 'nota', conteudo: 'abc' }] }, { t: { ...mk(hang), signal: ac.signal }, now: () => NOW }, () => {});
+    ac.abort();
+    await expect(p).rejects.toThrow();
+  });
+  it('geradoEm usa a data de São Paulo', async () => {
+    const d = await run({ ...base, textos: [{ nome: 'nota', conteudo: 'abc' }] }, fakeChat([synth(['S1'])]).chat, { now: () => Date.UTC(2026, 10, 15, 1, 30) }).p;
+    expect(d.geradoEm).toBe('2026-11-14');
+  });
   it('sem resultados e sem material → dossiê vazio sem sintetizar', async () => {
     const f = fakeChat(['["q1","q2"]']);
     const d = await run({ ...base, busca: true }, f.chat, { search: async () => [] }).p;

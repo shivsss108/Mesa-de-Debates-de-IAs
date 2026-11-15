@@ -32,7 +32,7 @@ function parse(raw: string, ids: Set<string>): Saida | null {
   return { premissa: { status, nota: str(p.nota).slice(0, 300) }, fatos, disputas };
 }
 
-function fallback(fontes: FonteLida[]): Saida {
+export function fallback(fontes: FonteLida[]): Saida {
   return {
     premissa: { status: 'nao_encontrada', nota: FALLBACK_NOTA },
     fatos: fontes.slice(0, 12).map((f, i) => ({ id: `F${i + 1}`, texto: f.conteudo.trim().slice(0, 300), fontes: [f.id] })),

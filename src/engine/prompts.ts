@@ -12,19 +12,20 @@ export const DOSSIE_BLOCK_MAX = 4000;
 
 const tema = (c: DebateConfig) => c.tema.slice(0, TEMA_MAX);
 
+const TZ = 'America/Sao_Paulo';
+/** Data civil (YYYY-MM-DD) em São Paulo; independe do fuso do servidor. */
+export const dataSP = (now: Date | number = new Date()): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(now);
+
 // geradoEm é 'YYYY-MM-DD': split de string evita deslocamento de fuso do new Date().
 export function hojeDe(config: DebateConfig, now: Date = new Date()): string {
   const g = config.dossie?.geradoEm;
-  if (g && /^\d{4}-\d{2}-\d{2}/.test(g)) {
-    const [y, m, d] = g.slice(0, 10).split('-');
-    return `${d}/${m}/${y}`;
-  }
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(now.getDate())}/${p(now.getMonth() + 1)}/${now.getFullYear()}`;
+  const [y, m, d] = (g && /^\d{4}-\d{2}-\d{2}/.test(g) ? g.slice(0, 10) : dataSP(now)).split('-');
+  return `${d}/${m}/${y}`;
 }
 
 const hoje = (c: DebateConfig, now?: Date) => `Hoje é ${hojeDe(c, now)}.`;
 
+/** Prioridade sob o limite: data/premissa > fatos > aviso e destaque > disputas > buscas dos membros (mais novas primeiro). Nunca corta no meio de uma linha. */
 export function dossieBlock(config: DebateConfig, state: DebateState, quem: string): string {
   const d = config.dossie;
   const extras = state.repertorioExtra?.fontes ?? [];
@@ -32,26 +33,57 @@ export function dossieBlock(config: DebateConfig, state: DebateState, quem: stri
   const seatIdx = config.seats.findIndex((s) => s.id === quem);
   const dividido = d?.modo === 'dividido' && seatIdx >= 0;
   const head: string[] = [];
-  const fatoLines: string[] = [];
-  const tail: string[] = [];
+  const fatos: string[] = [];
+  const disputas: string[] = [];
+  const aviso: string[] = [];
   if (d) {
     head.push(`Repertório (pesquisado em ${hojeDe(config)}):`);
     head.push(`Premissa do tema: ${d.premissa.status} — ${d.premissa.nota}`);
     d.fatos.forEach((f, i) => {
       if (dividido && i % config.seats.length !== seatIdx) return;
-      fatoLines.push(`- [${f.fontes.join(',')}] ${f.texto}`);
+      fatos.push(`- ${f.fontes.length ? `[${f.fontes.join(',')}] ` : ''}${f.texto}`);
     });
-    if (d.disputas.length) tail.push('Pontos em disputa:', ...d.disputas.map((x) => `- ${x}`));
-    if (dividido) tail.push('Você tem só parte das informações; outros podem saber fatos que você não sabe.');
+    disputas.push(...d.disputas.map((x) => `- ${x}`));
+    if (dividido) aviso.push('Você tem só parte das informações; outros podem saber fatos que você não sabe.');
   }
-  if (extras.length)
-    tail.push('Pesquisado durante o debate:', ...extras.map((f) => `- [${f.id}] (por ${f.porMembro ? nameOf(config, f.porMembro) : 'membro'}) ${f.titulo}${f.resumo ? ` — ${f.resumo}` : ''}`));
   const recorte = d?.modo === 'recorte' ? d.recortes?.[quem] : undefined;
-  if (recorte) tail.push(`Destaque para a sua área: ${recorte}`);
-  const render = (n: number) => [...head, ...(n ? ['Fatos:', ...fatoLines.slice(0, n)] : []), ...tail].join('\n');
-  let n = fatoLines.length;
-  while (n > 0 && render(n).length > DOSSIE_BLOCK_MAX) n--; // corta fatos do fim primeiro
-  return render(n).slice(0, DOSSIE_BLOCK_MAX);
+  if (recorte) aviso.push(`Destaque para a sua área: ${recorte}`);
+
+  let used = head.join('\n').length;
+  const fits = (ls: string[]) => used + ls.reduce((n, l) => n + l.length + 1, 0) <= DOSSIE_BLOCK_MAX;
+  const take = (ls: string[]) => { used += ls.reduce((n, l) => n + l.length + 1, 0); };
+  const greedy = (title: string | undefined, ls: string[]) => {
+    const out: string[] = [];
+    for (const l of ls) {
+      if (!fits([...(title && !out.length ? [title] : []), l])) break;
+      if (title && !out.length) take([title]);
+      take([l]);
+      out.push(l);
+    }
+    return out;
+  };
+  const fatosOk = greedy('Fatos:', fatos);
+  const avisoOk = greedy(undefined, aviso);
+  const dispOk = greedy('Pontos em disputa:', disputas);
+  const extraLine = (f: (typeof extras)[number], resumo: boolean) =>
+    `- [${f.id}] (por ${f.porMembro ? nameOf(config, f.porMembro) : 'membro'}) ${f.titulo}${resumo && f.resumo ? ` — ${f.resumo}` : ''}`;
+  const chosen = new Map<number, string>();
+  for (let i = extras.length - 1; i >= 0; i--) {
+    const hdr = chosen.size ? [] : ['Pesquisado durante o debate:'];
+    const l = [extraLine(extras[i], true), extraLine(extras[i], false)].find((x) => fits([...hdr, x]));
+    if (!l) continue;
+    take([...hdr, l]);
+    chosen.set(i, l);
+  }
+  const extraOk = [...chosen.entries()].sort((x, y) => x[0] - y[0]).map(([, l]) => l);
+  return [
+    ...head,
+    ...(fatosOk.length ? ['Fatos:', ...fatosOk] : []),
+    ...(dispOk.length ? ['Pontos em disputa:', ...dispOk] : []),
+    ...avisoOk.filter((l) => l.startsWith('Você tem')),
+    ...(extraOk.length ? ['Pesquisado durante o debate:', ...extraOk] : []),
+    ...avisoOk.filter((l) => !l.startsWith('Você tem')),
+  ].join('\n');
 }
 
 function nameOf(config: DebateConfig, id: string): string {

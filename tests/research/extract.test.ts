@@ -17,6 +17,10 @@ describe('extractText', () => {
   it('sem <article> usa todos os <p>', () => {
     expect(extractText('<nav>NAV</nav><p>um</p><div><p>dois</p></div>')).toBe('um\n\ndois')
   })
+  it('sem <article> prefere <main> e ignora header/footer/aside/form', () => {
+    const t = extractText('<header><p>HDR</p></header><main><p>corpo</p></main><aside><p>ASD</p></aside><form><p>FRM</p></form><footer><p>FTR</p></footer>')
+    expect(t).toBe('corpo')
+  })
   it('corta em max', () => {
     expect(extractText('<p>' + 'a'.repeat(50) + '</p>', 10)).toHaveLength(10)
   })

@@ -1,11 +1,12 @@
 import { PROVIDERS } from '@/providers/table';
 import type { Dossie, Fonte, ProviderId } from '@/types';
 import { validateDossie, type Keys } from '@/engine/validate';
-import type { LlmTarget } from './llm';
+import { dataSP } from '@/engine/prompts';
+import { isFatal, type LlmTarget } from './llm';
 import { buildQueries } from './queries';
 import { readSource } from './read';
 import { searchNews, type NewsItem } from './search';
-import { synthesize, type FonteLida } from './synthesize';
+import { fallback, synthesize, type FonteLida } from './synthesize';
 
 export interface ResearchInput {
   tema: string;
@@ -23,6 +24,8 @@ export interface ResearchDeps {
   read?: (url: string, deps?: { signal?: AbortSignal }) => Promise<string | undefined>;
   now?: () => number;
   deadlineMs?: number;
+  /** orçamento total da rota (Vercel mata em 60 s); estourou na síntese → dossiê de fallback */
+  budgetMs?: number;
 }
 
 const MAX_FONTES = 12;
@@ -47,12 +50,19 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
   const now = deps.now ?? Date.now;
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), deps.deadlineMs ?? 50_000);
+  const budget = new AbortController();
+  const budgetTimer = setTimeout(() => budget.abort(), deps.budgetMs ?? 57_000);
+  // LLM sob o orçamento; só o abort do chamador (t.signal) e a chave recusada são fatais (isFatal(e, t))
+  const tb: LlmTarget = { ...t, signal: t.signal ? AbortSignal.any([budget.signal, t.signal]) : budget.signal };
   try {
     // 1. busca: 2 consultas em paralelo; se ambas falham, zero resultados
     let web: NewsItem[] = [];
     if (input.busca) {
       onProgress({ etapa: 'buscando' });
-      const queries = await buildQueries(input.tema, input.idioma, t);
+      const queries = await buildQueries(input.tema, input.idioma, tb).catch((e) => {
+        if (isFatal(e, t)) throw e;
+        return [input.tema];
+      });
       const rs = await Promise.allSettled(queries.slice(0, 2).map((q) => search(q, input.idioma)));
       const seen = new Set<string>();
       web = rs
@@ -98,7 +108,9 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
     }
     let k = input.links.length;
     for (const item of web) {
-      const conteudo = (item.url ? lido[k++] : undefined) ?? item.resumo;
+      const r = item.url ? lido[k++] : undefined;
+      // leitura curta (paywall, banner) não vence o resumo do RSS
+      const conteudo = r && (r.length >= 500 || r.length > (item.resumo?.length ?? 0)) ? r : (item.resumo ?? r);
       if (!conteudo) continue;
       cru.push({ titulo: item.titulo.slice(0, MAX_TITULO), veiculo: item.veiculo?.slice(0, MAX_VEICULO), url: item.url, data: item.data, origem: 'web', conteudo });
     }
@@ -109,17 +121,21 @@ export async function runResearch(input: ResearchInput, deps: ResearchDeps, onPr
     });
 
     // 4. síntese
-    const geradoEm = new Date(now()).toISOString().slice(0, 10);
+    const geradoEm = dataSP(now());
     let saida: Pick<Dossie, 'premissa' | 'fatos' | 'disputas'>;
     if (fontes.length) {
       onProgress({ etapa: 'sintetizando' });
-      saida = await synthesize(fontes, input.tema, input.idioma, geradoEm, t);
+      saida = await synthesize(fontes, input.tema, input.idioma, geradoEm, tb).catch((e) => {
+        if (isFatal(e, t)) throw e;
+        return fallback(fontes);
+      });
     } else {
       saida = { premissa: { status: 'nao_encontrada', nota: 'Nenhuma fonte encontrada sobre o tema.' }, fatos: [], disputas: [] };
     }
     return fit({ geradoEm, ...saida, fontes: fontes.map(({ conteudo: _c, ...f }) => f), modo: input.modo });
   } finally {
     clearTimeout(timer);
+    clearTimeout(budgetTimer);
   }
 }
 

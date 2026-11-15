@@ -54,17 +54,19 @@ function paragraphs(h: string, max: number): string {
   return ps.join('\n\n')
 }
 
-/** Texto dos <p> do <article> (ou de toda a página, se não houver), até `max` caracteres. */
+/** Texto dos <p> do <article>, ou do <main> (ou de toda a página, se não houver), até `max` caracteres. */
 export function extractText(html: string, max = 3000): string {
   let body = html
-  for (const n of ['script', 'style', 'nav', 'noscript']) body = dropBlocks(body, n)
+  for (const n of ['script', 'style', 'nav', 'noscript', 'header', 'footer', 'aside', 'form']) body = dropBlocks(body, n)
   const lo = lower(body)
-  const a = lo.indexOf('<article')
   let text = ''
-  if (a >= 0) {
+  for (const tag of ['article', 'main']) {
+    const a = lo.indexOf('<' + tag)
+    if (a < 0 || isLetter(lo[a + tag.length + 1])) continue
     const s = lo.indexOf('>', a)
-    const e = lo.indexOf('</article', a)
+    const e = lo.indexOf('</' + tag, a)
     if (s >= 0) text = paragraphs(body.slice(s + 1, e < 0 ? body.length : e), max)
+    if (text) break
   }
   return (text || paragraphs(body, max)).slice(0, max)
 }

@@ -214,7 +214,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         const items = await search(query, config.idioma).catch((): NewsItem[] => []);
         s.buscasFeitas++;
         let k = Math.max(0, ...[...(config.dossie?.fontes ?? []), ...s.repertorioExtra.fontes].map((f) => Number(/^S(\d+)$/.exec(f.id)?.[1] ?? 0)));
-        const fontes: Fonte[] = items.map((n) => ({
+        const fontes: Fonte[] = items.slice(0, 4).map((n) => ({
           id: `S${++k}`,
           titulo: n.titulo.slice(0, 120),
           ...(n.resumo ? { resumo: n.resumo.slice(0, 300) } : {}),

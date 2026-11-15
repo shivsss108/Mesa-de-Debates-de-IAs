@@ -148,7 +148,7 @@ export default function PreparoPage() {
 
   const comecar = async () => {
     if (!dossie) return;
-    const base: Dossie = { ...dossie, modo: rep.modo };
+    const base: Dossie = { ...dossie, fatos: dossie.fatos.filter((f) => f.texto.trim()), modo: rep.modo };
     delete base.recortes;
     const v = validateDossie(base);
     if (v) return setError(v);
