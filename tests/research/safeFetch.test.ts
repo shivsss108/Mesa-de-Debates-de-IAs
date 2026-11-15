@@ -16,33 +16,38 @@ describe('isPrivateIp', () => {
 
 describe('safeFetch', () => {
   it('recusa protocolo não http(s)', async () => {
-    await expect(safeFetch('ftp://x', { lookup: pub })).rejects.toThrow()
+    await expect(safeFetch('ftp://x', { lookup: pub })).rejects.toThrow(/Protocolo não permitido/)
   })
   it('recusa localhost (DNS -> 127.0.0.1)', async () => {
     await expect(
       safeFetch('http://localhost/', { lookup: async () => ['127.0.0.1'], fetch: async () => html() }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/Endereço não permitido/)
   })
   it('recusa IP literal privado, inclusive IPv6 entre colchetes', async () => {
     const f = async () => html()
-    await expect(safeFetch('http://[::1]/', { fetch: f, lookup: pub })).rejects.toThrow()
-    await expect(safeFetch('http://[::ffff:127.0.0.1]/', { fetch: f, lookup: pub })).rejects.toThrow()
-    await expect(safeFetch('http://10.0.0.1/', { fetch: f, lookup: pub })).rejects.toThrow()
+    await expect(safeFetch('http://[::1]/', { fetch: f, lookup: pub })).rejects.toThrow(/Endereço não permitido/)
+    await expect(safeFetch('http://[::ffff:127.0.0.1]/', { fetch: f, lookup: pub })).rejects.toThrow(/Endereço não permitido/)
+    await expect(safeFetch('http://10.0.0.1/', { fetch: f, lookup: pub })).rejects.toThrow(/Endereço não permitido/)
   })
   it('recusa content-type que não é texto', async () => {
     await expect(
       safeFetch('http://exemplo.com/', { lookup: pub, fetch: async () => html('x', 'image/png') }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(/Tipo de conteúdo/)
   })
   it('recusa redirecionamento para IP privado', async () => {
-    const f = async () => new Response(null, { status: 302, headers: { location: 'http://10.0.0.1/' } })
-    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow()
+    let calls = 0
+    const f = async () =>
+      calls++ === 0
+        ? new Response(null, { status: 302, headers: { location: 'http://10.0.0.1/' } })
+        : html()
+    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow(/Endereço não permitido/)
+    expect(calls).toBe(1)
   })
   it('segue até 3 redirecionamentos e recusa o 4º', async () => {
     let n = 0
     const f = async () =>
       new Response(null, { status: 302, headers: { location: `http://exemplo.com/${++n}` } })
-    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow()
+    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow(/Redirecionamentos demais/)
     expect(n).toBe(4)
     let m = 0
     const g = async () =>
@@ -55,7 +60,7 @@ describe('safeFetch', () => {
   it('recusa corpo maior que 1,5 MB', async () => {
     const big = new Uint8Array(1_600_000).fill(97)
     const f = async () => html(new TextDecoder().decode(big))
-    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow()
+    await expect(safeFetch('http://exemplo.com/', { lookup: pub, fetch: f })).rejects.toThrow(/grande demais/)
   })
   it('devolve HTML pequeno', async () => {
     const r = await safeFetch('https://exemplo.com/a', { lookup: pub, fetch: async () => html() })
