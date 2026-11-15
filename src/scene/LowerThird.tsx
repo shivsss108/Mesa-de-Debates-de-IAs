@@ -10,7 +10,7 @@ import s from '@/scene/overlays.module.css';
 export function lowerThirdInfo(config: DebateConfig, id: string): { nome: string; linha: string; modelo: string; cor: string } {
   if (id === MODERATOR_ID) {
     const { provider, model } = config.moderador;
-    return { nome: 'Moderador', linha: 'Mediação', modelo: `${model} (${PROVIDERS[provider].nome})`, cor: '#ffb23e' };
+    return { nome: 'Moderador', linha: 'Mediação', modelo: [model, `(${PROVIDERS[provider].nome})`].filter(Boolean).join(' '), cor: '#ffb23e' };
   }
   const seat = config.seats.find((x) => x.id === id);
   if (!seat) return { nome: memberName(config, id), linha: '', modelo: '', cor: '#ffb23e' };
@@ -18,7 +18,7 @@ export function lowerThirdInfo(config: DebateConfig, id: string): { nome: string
   return {
     nome: seat.nome,
     linha: `${t.nome} · ${resolveExpertise(seat.expertise).nome}`,
-    modelo: `${seat.model} (${PROVIDERS[seat.provider].nome})`,
+    modelo: [seat.model, `(${PROVIDERS[seat.provider].nome})`].filter(Boolean).join(' '),
     cor: t.corGravata,
   };
 }

@@ -19,4 +19,9 @@ describe('lowerThirdInfo', () => {
   it('moderador', () => {
     expect(lowerThirdInfo(config, MODERATOR_ID)).toEqual({ nome: 'Moderador', linha: 'Mediação', modelo: `mod-m (${PROVIDERS.groq.nome})`, cor: '#ffb23e' });
   });
+  it('modelo vazio: sem espaço à frente', () => {
+    const c2 = { ...config, moderador: { ...config.moderador, model: '' }, seats: [{ ...seat, model: '' }] };
+    expect(lowerThirdInfo(c2, MODERATOR_ID).modelo).toBe(`(${PROVIDERS.groq.nome})`);
+    expect(lowerThirdInfo(c2, 's1').modelo).toBe(`(${PROVIDERS.groq.nome})`);
+  });
 });

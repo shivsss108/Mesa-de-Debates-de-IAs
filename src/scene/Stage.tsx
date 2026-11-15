@@ -11,6 +11,7 @@ import { defaultRadius, seatPositions } from '@/scene/layout';
 import { Studio } from '@/scene/Studio';
 import { Cameras, type CameraMode } from '@/scene/Cameras';
 import { Hud, type StageControls } from '@/scene/Hud';
+import { memberName } from '@/scene/names';
 import { Caption } from '@/scene/Caption';
 import { LowerThird } from '@/scene/LowerThird';
 import s from '@/scene/overlays.module.css';
@@ -90,7 +91,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
       {!bare && (
         <div className={s.root}>
           <LowerThird scene={scene} />
-          <Caption speaker={scene.speaker} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} />
+          <Caption speaker={scene.speaker} name={scene.speaker ? memberName(scene.config, scene.speaker) : undefined} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} />
         </div>
       )}
       {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}

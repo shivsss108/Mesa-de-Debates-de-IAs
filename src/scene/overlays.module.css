@@ -5,12 +5,14 @@
   position: absolute; z-index: 5; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--controls-h) + var(--gap));
   box-sizing: border-box; width: min(760px, 92vw); height: var(--cap-h);
-  overflow-y: auto; scrollbar-width: none; pointer-events: none;
+  overflow: hidden; pointer-events: none;
   padding: 10px 14px; border-radius: 8px;
   background: var(--panel-solid); color: var(--fg); border: 1px solid var(--line);
   font-size: 17px; line-height: 1.4;
 }
-.caption::-webkit-scrollbar { display: none; }
+.captionText { height: 2.8em; overflow-y: auto; scrollbar-width: none; } /* exatamente 2 linhas; o padding fica fora do scroller */
+.captionText::-webkit-scrollbar { display: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .gc {
   position: absolute; z-index: 5; left: 12px; pointer-events: none;
