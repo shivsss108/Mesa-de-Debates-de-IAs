@@ -31,8 +31,8 @@ describe('extractText', () => {
   it('<p> sem fechamento', () => {
     expect(extractText('<p>um<p>dois</p>')).toBe('um\n\ndois')
   })
-  it.each(['<p>x', '<script>x'])('entrada de ~1,5 MB com %s sem fechar é linear', (unit) => {
-    const big = unit.repeat(Math.ceil(1_500_000 / unit.length))
+  it.each([['<p>x', '<p>x'], ['<script>x', '<script>x'], ['<p> + <b repetido', '<p>' + '<b'.repeat(750_000)], ['<p> + < repetido', '<p>' + '<'.repeat(1_500_000)]])('entrada de ~1,5 MB (%s) é linear', (_n, input) => {
+    const big = input.length > 100 ? input : input.repeat(Math.ceil(1_500_000 / input.length))
     const t0 = performance.now()
     extractText(big)
     expect(performance.now() - t0).toBeLessThan(1000)

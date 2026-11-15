@@ -13,7 +13,7 @@ const tag = (block: string, name: string) => {
 }
 // Decodifica entidades, remove tags (a descrição do Google vem como HTML escapado) e normaliza espaços.
 const text = (s: string | undefined) =>
-  s === undefined ? undefined : decodeEntities(decodeEntities(s).replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
+  s === undefined ? undefined : decodeEntities(decodeEntities(s).replace(/<[^<>]*>/g, ' ')).replace(/\s+/g, ' ').trim()
 
 const items = (xml: string) => [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map((m) => m[1])
 

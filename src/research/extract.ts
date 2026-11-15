@@ -7,7 +7,7 @@ export function decodeEntities(s: string): string {
   })
 }
 
-const clean = (s: string) => decodeEntities(s.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
+const clean = (s: string) => decodeEntities(s.replace(/<[^<>]*>/g, '')).replace(/\s+/g, ' ').trim()
 
 const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase()) // preserva o comprimento (índices)
 const isLetter = (c: string | undefined) => c !== undefined && /[a-z0-9]/i.test(c)
@@ -47,7 +47,7 @@ function paragraphs(h: string, max: number): string {
     if (close >= 0 && close < start) close = lo.indexOf('</p', start) // -1 fica -1: não reescaneia
     const next = lo.indexOf('<p', start)
     const end = Math.min(...[close, next].filter((x) => x >= 0), h.length)
-    const t = clean(h.slice(start, end))
+    const t = clean(h.slice(start, Math.min(end, start + max * 4)))
     if (t) { ps.push(t); total += t.length + 2 }
     pos = end
   }
