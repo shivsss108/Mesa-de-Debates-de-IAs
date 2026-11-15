@@ -5,6 +5,8 @@ import type { CatalogModel } from '@/providers/catalog';
 import { TEMPERAMENTOS } from '@/presets/temperamentos';
 import { EXPERTISES } from '@/presets/expertises';
 import type { PersonaRef, ProviderId, Seat } from '@/types';
+import { AvatarThumb } from '@/skins/terno/AvatarThumb';
+import type { Look } from '@/skins/terno/look';
 import s from './config.module.css';
 
 const CUSTOM = '__custom';
@@ -62,16 +64,19 @@ function PersonaField({ label, value, presets, onChange }: {
   );
 }
 
-export function SeatCard({ seat, index, models, canRemove, onChange, onRemove }: {
-  seat: Seat; index: number; models: CatalogModel[]; canRemove: boolean;
+export function SeatCard({ seat, look, index, models, canRemove, onChange, onRemove }: {
+  seat: Seat; look?: Look; index: number; models: CatalogModel[]; canRemove: boolean;
   onChange: (s: Seat) => void; onRemove: () => void;
 }) {
   const nameId = useId();
   return (
-    <fieldset className={s.card}>
+    <fieldset className={s.card} style={look ? { '--tie': look.tie } as React.CSSProperties : undefined}>
       <legend className={s.sr}>Assento {index + 1}</legend>
       <div className={s.cardHead}>
-        <span className={s.badge} aria-hidden="true">{index + 1}</span>
+        <span className={s.avatar} aria-hidden="true">
+          {look ? <AvatarThumb look={look} size={48} /> : null}
+          <span className={s.badge}>{index + 1}</span>
+        </span>
         <label className={s.field} htmlFor={nameId}>
           Nome
           <input id={nameId} className={s.input} value={seat.nome} maxLength={24} onChange={(e) => onChange({ ...seat, nome: e.target.value })} />

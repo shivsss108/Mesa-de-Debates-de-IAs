@@ -7,7 +7,7 @@ import { validateDossie } from '@/engine/validate';
 import type { Progress, ResearchInput } from '@/research/pipeline';
 import { safeHref } from '@/scene/Sources';
 import type { DebateConfig, Dossie, ProviderId } from '@/types';
-import { Mascote } from '../Mascote';
+import { Logo } from '../Logo';
 import type { Repertorio } from '../config/Repertorio';
 import c from '../config/config.module.css';
 import s from './preparo.module.css';
@@ -191,7 +191,7 @@ export default function PreparoPage() {
     <main className={c.page}>
       <div className={c.wrap}>
         <header className={c.head}>
-          <Mascote size={52} />
+          <Logo size="sm" />
           <div>
             <h1>Preparar o repertório</h1>
             <p>{config.tema}</p>

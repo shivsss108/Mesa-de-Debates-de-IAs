@@ -6,7 +6,8 @@ import { PROVIDERS } from '@/providers/table';
 import type { CatalogModel } from '@/providers/catalog';
 import { defaultNames, randomizePersonalities } from '@/presets/randomize';
 import type { DebateConfig, ProviderId, Seat } from '@/types';
-import { Mascote } from '../Mascote';
+import { Logo } from '../Logo';
+import { looksFor } from '@/skins/terno/look';
 import { ModelPicker, SeatCard } from './SeatCard';
 import { Repertorio, REPERTORIO_VAZIO } from './Repertorio';
 import { validateConfig } from './validateConfig';
@@ -73,6 +74,7 @@ export default function ConfigPage() {
   }, []);
 
   const shown = useMemo(() => (onlyFree ? models.filter((m) => m.free) : models), [models, onlyFree]);
+  const looks = useMemo(() => looksFor(config?.seats ?? []), [config]);
   const problems = useMemo(() => {
     const p = config ? validateConfig(config, keys, env) : [];
     return rep.links.length > 5 ? [...p, 'No máximo 5 links no repertório.'] : p;
@@ -171,7 +173,7 @@ export default function ConfigPage() {
     <main className={s.page}>
       <div className={s.wrap}>
         <header className={s.head}>
-          <Mascote size={52} />
+          <Logo size="sm" />
           <div>
             <h1>Montar a mesa</h1>
             <p>Defina o tema, quem se senta e com qual modelo.</p>
@@ -250,7 +252,7 @@ export default function ConfigPage() {
           </div>
           <div className={s.seats}>
             {config.seats.map((seat, i) => (
-              <SeatCard key={seat.id} seat={seat} index={i} models={shown} canRemove={config.seats.length > 2}
+              <SeatCard key={seat.id} seat={seat} look={looks[seat.id]} index={i} models={shown} canRemove={config.seats.length > 2}
                 onChange={(next) => setSeats((all) => all.map((x, j) => (j === i ? next : x)))}
                 onRemove={() => setSeats((all) => all.filter((_, j) => j !== i).map((x, j) => ({ ...x, id: `m${j + 1}` })))} />
             ))}
