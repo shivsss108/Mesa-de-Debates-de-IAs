@@ -3,18 +3,22 @@ export interface VoiceProfile { voice?: SpeechSynthesisVoice; pitch: number; rat
 export const voicesAvailable = (): boolean =>
   typeof globalThis.speechSynthesis !== 'undefined' && globalThis.speechSynthesis.getVoices().length > 0;
 
-/** Prefere vozes do idioma; quando faltam, repete as vozes com pitch distinto (0.8–1.3). */
+/**
+ * Prefere vozes do idioma e, entre elas, só as neurais ("Natural" no Edge) quando existem.
+ * Quando faltam vozes, repete: a 1ª rodada fala no pitch natural (1), as seguintes em 0.9, 1.1, 0.8, 1.2…
+ */
 export function assignVoices(memberIds: string[], voices: SpeechSynthesisVoice[], lang: string): Record<string, VoiceProfile> {
   const l = lang.toLowerCase();
   const exact = voices.filter((v) => v.lang.toLowerCase().replace('_', '-') === l);
   const sameLang = voices.filter((v) => v.lang.toLowerCase().startsWith(l.slice(0, 2)));
-  const pool = exact.length ? exact : sameLang.length ? sameLang : voices;
+  const inLang = exact.length ? exact : sameLang.length ? sameLang : voices;
+  const natural = inLang.filter((v) => /natural|neural/i.test(v.name));
+  const pool = natural.length ? natural : inLang;
   const n = Math.max(pool.length, 1);
-  const rounds = Math.ceil(memberIds.length / n);
   const out: Record<string, VoiceProfile> = {};
   memberIds.forEach((id, i) => {
     const r = Math.floor(i / n);
-    const pitch = rounds <= 1 ? 1 : 0.8 + (0.5 * r) / (rounds - 1);
+    const pitch = 1 + (r % 2 ? -1 : 1) * 0.1 * Math.ceil(r / 2);
     out[id] = { voice: pool[i % n], pitch: Math.round(pitch * 100) / 100, rate: 1 };
   });
   return out;

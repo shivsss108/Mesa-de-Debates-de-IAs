@@ -13,6 +13,12 @@ describe('assignVoices', () => {
     expect(pairs.size).toBe(5);
     for (const p of Object.values(out)) expect(p.pitch).toBeGreaterThanOrEqual(0.8), expect(p.pitch).toBeLessThanOrEqual(1.3);
   });
+  it('havendo vozes neurais do idioma, usa só elas, a 1ª rodada sem mexer no pitch', () => {
+    const voices = [v('Microsoft Maria', 'pt-BR'), v('Microsoft Francisca Online (Natural)', 'pt-BR'), v('Microsoft Antonio Online (Natural)', 'pt-BR')];
+    const out = assignVoices(ids, voices, 'pt-BR');
+    for (const p of Object.values(out)) expect(p.voice?.name).toMatch(/Natural/);
+    expect([out.a.pitch, out.b.pitch]).toEqual([1, 1]);
+  });
   it('sem vozes do idioma usa as disponíveis', () => {
     const out = assignVoices(ids, [v('en', 'en-US')], 'pt-BR');
     expect(Object.values(out).every((p) => p.voice?.name === 'en')).toBe(true);
