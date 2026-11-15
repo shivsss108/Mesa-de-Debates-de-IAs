@@ -65,6 +65,7 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
       return patch(s, e.member, { stance: e.value });
     case 'status': {
       const next = patch(s, e.member, { status: e.state });
+      if (e.state === 'sem_sinal' && s.speaker === e.member) next.searching = undefined;
       return e.reason ? { ...next, transcript: [...next.transcript, { speaker: e.member, text: `(não respondeu: ${e.reason})` }] } : next;
     }
     case 'hands': {

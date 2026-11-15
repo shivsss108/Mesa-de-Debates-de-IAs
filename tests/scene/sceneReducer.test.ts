@@ -86,4 +86,12 @@ describe('status com motivo', () => {
     s = sceneReducer(s, { seq: 4, t: 40, type: 'debate_start', config });
     expect(s.extraSources).toEqual([]);
   });
+  it('sem_sinal do membro pesquisando limpa searching', () => {
+    const evs = seqd([
+      { type: 'debate_start', config },
+      { type: 'research', member: 'm1', query: 'q' },
+      { type: 'status', member: 'm1', state: 'sem_sinal' },
+    ]);
+    expect(evs.reduce(sceneReducer, initialScene).searching).toBeUndefined();
+  });
 });

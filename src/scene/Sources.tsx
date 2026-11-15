@@ -16,7 +16,7 @@ function Item({ f, config }: { f: Fonte; config?: DebateConfig }) {
   return (
     <li>
       {f.veiculo && <>{f.veiculo} · </>}
-      {href ? <a href={href} target="_blank" rel="noopener noreferrer">{f.titulo}</a> : f.titulo}
+      {href ? <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{f.titulo}</a> : f.titulo}
       {f.data && <> ({f.data})</>}
       {f.porMembro && <> — por {memberName(config, f.porMembro)}</>}
     </li>
