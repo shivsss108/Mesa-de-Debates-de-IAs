@@ -1,41 +1,91 @@
 'use client';
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Outlines } from '@react-three/drei';
 import { dampE } from 'maath/easing';
 import * as THREE from 'three';
 import { MODERATOR_ID, type Emotion } from '@/types';
 import { mouthOpen } from '@/voice/speech';
-import { resolveTemperamento } from '@/presets/temperamentos';
 import { resolveExpertise, type Expertise } from '@/presets/expertises';
 import type { Skin } from '@/skins/types';
 import { drawFace, FACE_SIZE } from './face';
+import { lookOf, type Hair } from './look';
 import { POSES, poseAt, type Joint } from './poses';
 import { listenerReaction } from './reactions';
 
 type AvatarProps = Parameters<Skin['Avatar']>[0];
 
-const OUT = 0.012; // espessura do contorno
 const JOINTS: Joint[] = ['cabeca', 'tronco', 'ombroE', 'cotoveloE', 'ombroD', 'cotoveloD'];
 const ZERO: [number, number, number] = [0, 0, 0];
 const FACE_MS = 1000 / 12; // redesenho do rosto no máx. ~12 Hz
 const BLINK_MS = 130;
+const BREATH = Math.PI * 2 * 0.25; // respiração ~0.25 Hz
 
-const SUIT = new THREE.MeshToonMaterial({ color: '#1b1b20' });
-const WHITE = new THREE.MeshToonMaterial({ color: '#ffffff' });
-const BLACK = new THREE.MeshToonMaterial({ color: '#0a0a0a' });
-const WOOD = new THREE.MeshToonMaterial({ color: '#6d4425' });
-const GOLD = new THREE.MeshToonMaterial({ color: '#e0b84a' });
-const GRAY = new THREE.MeshToonMaterial({ color: '#8d969b' });
+/* Proporções (m). Quadril (pivô do tronco) em HIP; púlpito ~1.05: com bater_na_mesa a mão (ombro y 0.45,
+   braço 0.26 + antebraço 0.24) para em y≈1.06 à frente do avatar. */
+const HIP = 0.95;
+const SHOULDER: [number, number] = [0.235, 0.45];
+const UPPER = 0.26;
+const HAND = 0.24; // cotovelo → centro da mão
+const HEAD_R = 0.23;
+const NECK_Y = 0.6; // pivô da cabeça (local do tronco); centro da cabeça +0.2
 
-export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = false, speakerStance }: AvatarProps) {
+/* Materiais compartilhados por cor (cache de módulo). */
+const MATS = new Map<string, THREE.MeshStandardMaterial>();
+function mat(color: string, roughness = 0.8, side: THREE.Side = THREE.FrontSide) {
+  const key = `${color}|${roughness}|${side}`;
+  let m = MATS.get(key);
+  if (!m) MATS.set(key, (m = new THREE.MeshStandardMaterial({ color, roughness, side })));
+  return m;
+}
+const shade = (hex: string, k: number) => `#${new THREE.Color(hex).multiplyScalar(k).getHexString()}`;
+const WHITE = mat('#f4f4f2');
+const BLACK = mat('#111111', 0.4);
+const WOOD = mat('#6d4425', 0.7);
+const GRAY = mat('#8d969b', 0.5);
+const GOLD = new THREE.MeshStandardMaterial({ color: '#e0b84a', roughness: 0.35, metalness: 0.7 });
+
+/* Geometrias compartilhadas entre avatares. */
+const torsoProfile = [[0.15, 0], [0.16, 0.1], [0.18, 0.25], [0.2, 0.38], [0.19, 0.45], [0.13, 0.52], [0.06, 0.555], [0, 0.56]]
+  .map(([r, y]) => new THREE.Vector2(r, y));
+const G = {
+  torso: new THREE.LatheGeometry(torsoProfile, 20),
+  leg: new THREE.CapsuleGeometry(0.075, 0.8, 4, 10),
+  neck: new THREE.CylinderGeometry(0.055, 0.06, 0.14, 12),
+  head: new THREE.SphereGeometry(HEAD_R, 32, 24),
+  ball: new THREE.SphereGeometry(1, 14, 10), // esfera unitária (escalar na malha)
+  shirtV: new THREE.CircleGeometry(0.075, 3),
+  lapel: new THREE.PlaneGeometry(0.055, 0.2),
+  tie: new THREE.BoxGeometry(0.036, 0.19, 0.01),
+  knot: new THREE.BoxGeometry(0.04, 0.035, 0.015),
+  upper: new THREE.CapsuleGeometry(0.055, UPPER - 0.08, 4, 10),
+  fore: new THREE.CapsuleGeometry(0.048, HAND - 0.1, 4, 10),
+  cuff: new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12),
+  palm: new THREE.CapsuleGeometry(0.036, 0.05, 4, 10),
+  thumb: new THREE.CapsuleGeometry(0.014, 0.035, 3, 6),
+  hairCap: new THREE.SphereGeometry(HEAD_R + 0.016, 24, 12, 0, Math.PI * 2, 0, 1.2),
+  beard: new THREE.SphereGeometry(HEAD_R + 0.008, 20, 6, 0, Math.PI, Math.PI / 2 + 0.6, Math.PI / 2 - 0.75),
+  lens: new THREE.TorusGeometry(0.045, 0.007, 6, 20),
+  bridge: new THREE.BoxGeometry(0.05, 0.007, 0.007),
+};
+
+/** Cachos: pontos (polar, azimute) sobre a calota, sem cobrir a testa. */
+const CURLS: [number, number, number][] = (
+  [[0.2, 0], [0.55, 2], [0.55, 4], [0.7, 0.9], [0.7, -0.9], [0.95, 1.6], [0.95, -1.6], [0.95, 2.4], [0.95, -2.4], [1.1, Math.PI], [0.6, Math.PI]] as const
+).map(([p, a]) => {
+  const r = HEAD_R + 0.03;
+  return [r * Math.sin(p) * Math.sin(a), 0.2 + r * Math.cos(p), r * Math.sin(p) * Math.cos(a) - 0.03];
+});
+
+export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = false, speakerStance, look: lookProp }: AvatarProps) {
   const moderator = seat === 'moderador';
   const id = moderator ? MODERATOR_ID : seat.id;
-  const tie = moderator ? '#ffffff' : resolveTemperamento(seat.temperamento).corGravata;
+  const look = useMemo(() => lookProp ?? lookOf(seat), [lookProp, seat]);
   const acessorio = moderator ? undefined : accessoryOf(resolveExpertise(seat.expertise));
+  const suit = mat(look.suit);
+  const skin = mat(look.skin, 0.6);
 
   const root = useRef<THREE.Group>(null);
-  const faceMat = useRef<THREE.MeshToonMaterial>(null);
+  const faceMat = useRef<THREE.MeshStandardMaterial>(null);
   const cabeca = useRef<THREE.Group>(null);
   const tronco = useRef<THREE.Group>(null);
   const ombroE = useRef<THREE.Group>(null);
@@ -63,17 +113,19 @@ export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = fal
     const reaction = isSpeaker || !speakerPos ? (view.handUp ? 'mao_levantada' : 'idle') : listenerReaction(view, speakerStance ?? 0, addressed);
     const pose = poseAt(view, nowT, isSpeaker, reaction);
 
-    // citado: vira a cabeça para o orador
-    let yaw = 0;
-    if (addressed && speakerPos && !isSpeaker && root.current) {
-      root.current.worldToLocal(st.look.set(speakerPos[0], 1.5, speakerPos[2]));
+    // todo ouvinte olha para o orador (cabeça); o citado também gira o tronco
+    let yaw = 0, yawT = 0;
+    if (speakerPos && !isSpeaker && root.current) {
+      root.current.worldToLocal(st.look.set(speakerPos[0], 1.7, speakerPos[2]));
       yaw = THREE.MathUtils.clamp(Math.atan2(st.look.x, st.look.z), -1.1, 1.1);
+      if (addressed) yawT = THREE.MathUtils.clamp(yaw, -0.3, 0.3);
     }
 
     const step = Math.min(dt, 0.1);
     for (const j of JOINTS) {
       const src = pose[j] ?? ZERO;
-      st.tgt[0] = src[0]; st.tgt[1] = src[1] + (j === 'cabeca' ? yaw : 0); st.tgt[2] = src[2];
+      const extra = j === 'cabeca' ? yaw - yawT : j === 'tronco' ? yawT : 0; // cabeça é filha do tronco
+      st.tgt[0] = src[0]; st.tgt[1] = src[1] + extra; st.tgt[2] = src[2];
       dampE(st.base[j], st.tgt, 0.18, step);
     }
 
@@ -84,7 +136,10 @@ export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = fal
     else if (pose === POSES.balancar_cabeca) cabecaX = 0.12 * Math.sin(t * 5);
     else if (pose === POSES.falando) { ombroDx = 0.15 * Math.sin(t * 3); cotoveloDx = 0.2 * Math.sin(t * 3 + 1); }
     if (view.status === 'sem_sinal') { cabecaX += 0.35; troncoX = 0.1; } // cabisbaixo
-    tronco.current?.rotation.set(b.tronco.x + troncoX, b.tronco.y, b.tronco.z);
+    if (tronco.current) {
+      tronco.current.rotation.set(b.tronco.x + troncoX, b.tronco.y, b.tronco.z);
+      tronco.current.scale.y = 1 + 0.01 * Math.sin(t * BREATH);
+    }
     cabeca.current?.rotation.set(b.cabeca.x + cabecaX, b.cabeca.y, b.cabeca.z);
     ombroE.current?.rotation.copy(b.ombroE);
     cotoveloE.current?.rotation.copy(b.cotoveloE);
@@ -98,71 +153,63 @@ export function TernoAvatar({ seat, view, isSpeaker, speakerPos, addressed = fal
     // boca segue o relógio de fala (uma abertura por palavra); `status` não entra: membros ficam 'pensando' até depois do turn_end
     const mouth = isSpeaker && !offline ? mouthOpen(id, now) : 0;
     const d = st.drawn;
-    const changed = offline || d.emotion !== view.emotion || d.blink !== blink || d.mouth !== mouth || d.offline !== offline;
+    const changed = offline || d.emotion !== view.emotion || d.blink !== blink || d.mouth !== mouth || d.offline !== offline || d.skin !== look.skin;
     if (changed && now - st.lastDraw >= FACE_MS) {
-      drawFace(st.ctx, view.emotion, { blink, mouthOpen: mouth, offline, skin: '#e0b89a' });
+      drawFace(st.ctx, view.emotion, { blink, mouthOpen: mouth, offline, skin: look.skin });
       st.tex.needsUpdate = true;
       st.lastDraw = now;
-      d.emotion = view.emotion; d.blink = blink; d.mouth = mouth; d.offline = offline;
+      d.emotion = view.emotion; d.blink = blink; d.mouth = mouth; d.offline = offline; d.skin = look.skin;
     }
   });
 
+  const lapel = mat(shade(look.suit, 0.7));
   return (
     <group ref={root}>
-      {/* pernas e sapatos */}
+      {/* pernas simples (o púlpito cobre) */}
       {[-1, 1].map((s) => (
-        <group key={s} position={[s * 0.085, 0, 0]}>
-          <mesh position={[0, 0.46, 0]} material={SUIT}>
-            <capsuleGeometry args={[0.065, 0.72, 4, 10]} />
-            <Outlines thickness={OUT} color="black" />
-          </mesh>
-          <mesh position={[0, 0.035, 0.04]} material={BLACK}>
-            <boxGeometry args={[0.1, 0.07, 0.2]} />
-          </mesh>
-        </group>
+        <mesh key={s} position={[s * 0.085, 0.475, 0]} geometry={G.leg} material={suit} />
       ))}
 
-      <group ref={tronco} position={[0, 0.85, 0]}>
-        {/* paletó */}
-        <mesh position={[0, 0.25, 0]} scale={[1, 1, 0.72]} material={SUIT}>
-          <capsuleGeometry args={[0.16, 0.24, 4, 14]} />
-          <Outlines thickness={OUT} color="black" />
-        </mesh>
-        {/* camisa (V) e gravata */}
-        <mesh position={[0, 0.39, 0.112]} rotation-z={-Math.PI / 2} scale={[1.7, 1, 1]} material={WHITE}>
-          <circleGeometry args={[0.075, 3]} />
-        </mesh>
-        <mesh position={[0, 0.3, 0.118]}>
-          <boxGeometry args={[0.032, 0.2, 0.01]} />
-          <meshToonMaterial color={tie} />
-          <Outlines thickness={0.004} color="black" />
-        </mesh>
+      <group ref={tronco} position={[0, HIP, 0]}>
+        <mesh scale={[1, 1, 0.65]} geometry={G.torso} material={suit} />
+        {/* camisa (V), lapelas e gravata */}
+        <mesh position={[0, 0.4, 0.118]} rotation-z={-Math.PI / 2} scale={[1.8, 1, 1]} geometry={G.shirtV} material={WHITE} />
+        {[-1, 1].map((s) => (
+          <mesh key={s} position={[s * 0.052, 0.36, 0.124]} rotation={[0, s * 0.35, -s * 0.32]} geometry={G.lapel} material={lapel} />
+        ))}
+        <mesh position={[0, 0.43, 0.126]} geometry={G.knot} material={mat(look.tie, 0.6)} />
+        <mesh position={[0, 0.32, 0.124]} geometry={G.tie} material={mat(look.tie, 0.6)} />
+        <mesh position={[0, 0.55, 0]} geometry={G.neck} material={skin} />
         {acessorio === 'estetoscopio' && <Stethoscope />}
         {acessorio === 'broche' && (
-          <mesh position={[0.085, 0.36, 0.112]} rotation-x={Math.PI / 2} material={GOLD}>
+          <mesh position={[0.1, 0.37, 0.115]} rotation-x={Math.PI / 2} material={GOLD}>
             <cylinderGeometry args={[0.022, 0.022, 0.01, 16]} />
           </mesh>
         )}
 
-        <group ref={cabeca} position={[0, 0.5, 0]}>
-          <mesh position={[0, 0.15, 0]}>
-            <sphereGeometry args={[0.2, 32, 24]} />
-            <meshToonMaterial ref={faceMat} />
-            <Outlines thickness={0.015} color="black" />
+        <group ref={cabeca} position={[0, NECK_Y, 0]}>
+          <mesh position={[0, 0.2, 0]} geometry={G.head}>
+            <meshStandardMaterial ref={faceMat} roughness={0.6} />
           </mesh>
-          {acessorio === 'oculos' && <Glasses />}
+          {/* nariz e orelhas */}
+          <mesh position={[0, 0.18, 0.222]} scale={[0.026, 0.032, 0.024]} geometry={G.ball} material={skin} />
+          {[-1, 1].map((s) => (
+            <mesh key={s} position={[s * 0.226, 0.19, 0]} scale={[0.022, 0.045, 0.035]} geometry={G.ball} material={skin} />
+          ))}
+          {acessorio !== 'capacete' && <HairStyle hair={look.hair} color={look.hairColor} />}
+          {(look.glasses || acessorio === 'oculos') && <Glasses />}
           {acessorio === 'capacete' && <HardHat />}
         </group>
 
-        <Arm side="E" shoulder={ombroE} elbow={cotoveloE}>
+        <Arm side="E" shoulder={ombroE} elbow={cotoveloE} suit={suit} skin={skin}>
           {acessorio && HELD[acessorio]}
           {acessorio === 'relogio' && (
-            <mesh position={[0, -0.27, 0]} material={GOLD}>
-              <cylinderGeometry args={[0.052, 0.052, 0.03, 14]} />
+            <mesh position={[0, -0.18, 0]} material={GOLD}>
+              <cylinderGeometry args={[0.052, 0.052, 0.025, 14]} />
             </mesh>
           )}
         </Arm>
-        <Arm side="D" shoulder={ombroD} elbow={cotoveloD}>{moderator && <Gavel />}</Arm>
+        <Arm side="D" shoulder={ombroD} elbow={cotoveloD} suit={suit} skin={skin}>{moderator && <Gavel />}</Arm>
       </group>
     </group>
   );
@@ -185,7 +232,7 @@ function makeFrameState(now: number) {
     nextBlink: now + 3000 + Math.random() * 3000,
     phase: Math.random() * 10,
     lastDraw: -Infinity,
-    drawn: { emotion: '' as Emotion | '', blink: false, mouth: -1, offline: false },
+    drawn: { emotion: '' as Emotion | '', blink: false, mouth: -1, offline: false, skin: '' },
   };
 }
 type FrameState = ReturnType<typeof makeFrameState>;
@@ -195,91 +242,113 @@ function accessoryOf(e: Expertise): Expertise['acessorio'] | undefined {
   return e.id === 'neutra' ? undefined : e.acessorio;
 }
 
+/** Cabelo em coordenadas do grupo da cabeça (centro da cabeça em y=0.2). */
+function HairStyle({ hair, color }: { hair: Hair; color: string }) {
+  const m = mat(color, 0.7, THREE.DoubleSide);
+  const cap = <mesh position={[0, 0.2, 0]} rotation-x={-0.45} geometry={G.hairCap} material={m} />;
+  switch (hair) {
+    case 'curto':
+      return cap;
+    case 'repartido':
+      return (
+        <>
+          {cap}
+          <mesh position={[-0.06, 0.4, 0.1]} rotation={[0.3, 0, 0.35]} scale={[0.13, 0.055, 0.11]} geometry={G.ball} material={m} />
+        </>
+      );
+    case 'coque':
+      return (
+        <>
+          {cap}
+          <mesh position={[0, 0.4, -0.17]} scale={0.085} geometry={G.ball} material={m} />
+        </>
+      );
+    case 'cacheado':
+      return (
+        <>
+          {cap}
+          {CURLS.map((p, i) => <mesh key={i} position={p} scale={0.07} geometry={G.ball} material={m} />)}
+        </>
+      );
+    case 'careca_barba':
+      return <mesh position={[0, 0.2, 0]} geometry={G.beard} material={m} />;
+  }
+}
+
 type GroupRef = RefObject<THREE.Group | null>;
 
-function Arm({ side, shoulder, elbow, children }: { side: 'E' | 'D'; shoulder: GroupRef; elbow: GroupRef; children?: ReactNode }) {
+function Arm({ side, shoulder, elbow, suit, skin, children }: {
+  side: 'E' | 'D'; shoulder: GroupRef; elbow: GroupRef; suit: THREE.Material; skin: THREE.Material; children?: ReactNode;
+}) {
   const s = side === 'E' ? 1 : -1;
   return (
-    <group ref={shoulder} position={[s * 0.2, 0.42, 0]}>
-      <mesh position={[0, -0.16, 0]} material={SUIT}>
-        <capsuleGeometry args={[0.05, 0.24, 4, 10]} />
-        <Outlines thickness={OUT} color="black" />
-      </mesh>
-      <group ref={elbow} position={[0, -0.32, 0]}>
-        <mesh position={[0, -0.14, 0]} material={SUIT}>
-          <capsuleGeometry args={[0.045, 0.2, 4, 10]} />
-          <Outlines thickness={OUT} color="black" />
-        </mesh>
-        <mesh position={[0, -0.33, 0]} material={WHITE}>
-          <sphereGeometry args={[0.05, 14, 10]} />
-          <Outlines thickness={OUT} color="black" />
-        </mesh>
+    <group ref={shoulder} position={[s * SHOULDER[0], SHOULDER[1], 0]}>
+      <mesh scale={0.072} geometry={G.ball} material={suit} />
+      <mesh position={[0, -UPPER / 2, 0]} geometry={G.upper} material={suit} />
+      <group ref={elbow} position={[0, -UPPER, 0]}>
+        <mesh position={[0, -0.09, 0]} geometry={G.fore} material={suit} />
+        <mesh position={[0, -0.19, 0]} geometry={G.cuff} material={WHITE} />
+        {/* mão (palma achatada + polegar para a frente) */}
+        <mesh position={[0, -HAND, 0]} scale={[0.75, 1, 1]} geometry={G.palm} material={skin} />
+        <mesh position={[-s * 0.012, -HAND + 0.012, 0.032]} rotation-x={-0.6} geometry={G.thumb} material={skin} />
         {children}
       </group>
     </group>
   );
 }
 
-/** Objetos segurados na mão esquerda (coordenadas do antebraço; mão em y=-0.33). */
+/** Objetos segurados na mão esquerda (coordenadas do antebraço; mão em y=-HAND). */
 const HELD: Partial<Record<Expertise['acessorio'], ReactNode>> = {
   prancheta: (
-    <group position={[0, -0.36, 0.07]} rotation={[-0.3, 0, 0]}>
-      <mesh material={WOOD}><boxGeometry args={[0.16, 0.22, 0.012]} /><Outlines thickness={0.006} color="black" /></mesh>
+    <group position={[0, -0.27, 0.07]} rotation={[-0.3, 0, 0]}>
+      <mesh material={WOOD}><boxGeometry args={[0.16, 0.22, 0.012]} /></mesh>
       <mesh position={[0, -0.01, 0.007]} material={WHITE}><boxGeometry args={[0.13, 0.17, 0.002]} /></mesh>
     </group>
   ),
   livro: (
-    <mesh position={[0, -0.36, 0.06]} rotation={[-0.3, 0, 0]}>
+    <mesh position={[0, -0.27, 0.06]} rotation={[-0.3, 0, 0]} material={mat('#8e2b2b', 0.7)}>
       <boxGeometry args={[0.14, 0.18, 0.04]} />
-      <meshToonMaterial color="#8e2b2b" />
-      <Outlines thickness={0.006} color="black" />
     </mesh>
   ),
   calculadora: (
-    <mesh position={[0, -0.35, 0.055]} rotation={[-0.4, 0, 0]} material={GRAY}>
+    <mesh position={[0, -0.26, 0.055]} rotation={[-0.4, 0, 0]} material={GRAY}>
       <boxGeometry args={[0.08, 0.12, 0.02]} />
-      <Outlines thickness={0.006} color="black" />
     </mesh>
   ),
   pasta: (
-    <mesh position={[0, -0.47, 0]} material={WOOD}>
+    <mesh position={[0, -0.38, 0]} material={WOOD}>
       <boxGeometry args={[0.07, 0.22, 0.3]} />
-      <Outlines thickness={0.008} color="black" />
     </mesh>
   ),
   pincel: (
-    <group position={[0, -0.35, 0.03]} rotation={[-1.2, 0, 0]}>
+    <group position={[0, -0.26, 0.03]} rotation={[-1.2, 0, 0]}>
       <mesh material={WOOD}><cylinderGeometry args={[0.01, 0.012, 0.22, 8]} /></mesh>
-      <mesh position={[0, 0.13, 0]}><coneGeometry args={[0.018, 0.05, 8]} /><meshToonMaterial color="#d81b60" /></mesh>
+      <mesh position={[0, 0.13, 0]} material={mat('#d81b60', 0.6)}><coneGeometry args={[0.018, 0.05, 8]} /></mesh>
     </group>
   ),
 };
 
+/** Armação na altura dos olhos (≈0.12 rad acima do equador da cabeça). */
 function Glasses() {
   return (
-    <group position={[0, 0.175, 0.195]}>
+    <group position={[0, 0.228, 0.236]}>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[s * 0.065, 0, 0]} material={BLACK}>
-          <torusGeometry args={[0.042, 0.008, 6, 20]} />
-        </mesh>
+        <mesh key={s} position={[s * 0.072, 0, -0.012]} geometry={G.lens} material={BLACK} />
       ))}
-      <mesh material={BLACK}><boxGeometry args={[0.05, 0.008, 0.008]} /></mesh>
+      <mesh geometry={G.bridge} material={BLACK} />
     </group>
   );
 }
 
 function HardHat() {
+  const yellow = mat('#fbc02d', 0.5, THREE.DoubleSide);
   return (
-    <group position={[0, 0.22, 0]}>
-      <mesh>
-        <sphereGeometry args={[0.21, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshToonMaterial color="#fbc02d" side={THREE.DoubleSide} />
-        <Outlines thickness={0.01} color="black" />
+    <group position={[0, 0.25, 0]}>
+      <mesh material={yellow}>
+        <sphereGeometry args={[0.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
       </mesh>
-      <mesh position={[0, 0.005, 0.02]}>
-        <cylinderGeometry args={[0.245, 0.245, 0.015, 24]} />
-        <meshToonMaterial color="#fbc02d" />
-        <Outlines thickness={0.006} color="black" />
+      <mesh position={[0, 0.005, 0.02]} material={yellow}>
+        <cylinderGeometry args={[0.285, 0.285, 0.015, 24]} />
       </mesh>
     </group>
   );
@@ -288,12 +357,11 @@ function HardHat() {
 function Stethoscope() {
   return (
     <group>
-      <mesh position={[0, 0.46, 0.02]} rotation-x={Math.PI / 2 - 0.3} material={GRAY}>
-        <torusGeometry args={[0.1, 0.011, 6, 24]} />
+      <mesh position={[0, 0.5, 0.025]} rotation-x={Math.PI / 2 - 0.3} material={GRAY}>
+        <torusGeometry args={[0.085, 0.011, 6, 24]} />
       </mesh>
-      <mesh position={[-0.06, 0.24, 0.12]} rotation-x={Math.PI / 2} material={GRAY}>
+      <mesh position={[-0.07, 0.27, 0.125]} rotation-x={Math.PI / 2} material={GRAY}>
         <cylinderGeometry args={[0.028, 0.028, 0.015, 14]} />
-        <Outlines thickness={0.005} color="black" />
       </mesh>
     </group>
   );
@@ -302,11 +370,10 @@ function Stethoscope() {
 /** Martelo do moderador, na mão direita. */
 function Gavel() {
   return (
-    <group position={[0, -0.33, 0.04]} rotation-x={-Math.PI / 2}>
+    <group position={[0, -HAND, 0.04]} rotation-x={-Math.PI / 2}>
       <mesh position={[0, 0.08, 0]} material={WOOD}><cylinderGeometry args={[0.012, 0.012, 0.2, 8]} /></mesh>
       <mesh position={[0, 0.18, 0]} rotation-z={Math.PI / 2} material={WOOD}>
         <cylinderGeometry args={[0.035, 0.035, 0.11, 12]} />
-        <Outlines thickness={0.006} color="black" />
       </mesh>
     </group>
   );

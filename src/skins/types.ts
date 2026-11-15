@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import type { Seat } from '@/types';
 import type { MemberView } from '@/scene/sceneReducer';
+import type { Look } from '@/skins/terno/look';
 
 export interface Skin {
   Avatar: FC<{
@@ -12,5 +13,7 @@ export interface Skin {
     addressed?: boolean;
     /** posição (-1..1) do orador atual */
     speakerStance?: number;
+    /** aparência resolvida pela mesa (evita repetições); sem ela a skin usa `lookOf(seat)` */
+    look?: Look;
   }>;
 }

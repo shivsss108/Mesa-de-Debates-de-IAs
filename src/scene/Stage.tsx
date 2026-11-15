@@ -6,6 +6,7 @@ import { MODERATOR_ID } from '@/types';
 import type { SceneState } from '@/scene/sceneReducer';
 import type { Skin } from '@/skins/types';
 import { ternoSkin } from '@/skins/terno';
+import { looksFor } from '@/skins/terno/look';
 import { defaultRadius, seatPositions } from '@/scene/layout';
 import { Room, roomSize } from '@/scene/Room';
 import { Table } from '@/scene/Table';
@@ -37,7 +38,9 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  const seats = scene.config?.seats ?? [];
+  const cfgSeats = scene.config?.seats;
+  const seats = cfgSeats ?? [];
+  const looks = useMemo(() => looksFor(cfgSeats ?? []), [cfgSeats]);
   const n = seats.length + 1;
   const radius = defaultRadius(n);
   const poses = useMemo(() => seatPositions(n, radius), [n, radius]);
@@ -66,7 +69,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
               onPointerOver={(e) => { e.stopPropagation(); setHovered(id); }}
               onPointerOut={() => setHovered((h) => (h === id ? undefined : h))}
             >
-              <Avatar seat={seat} view={view} isSpeaker={scene.speaker === id} speakerPos={speakerPos} addressed={scene.addressedTo === id} speakerStance={speakerStance} />
+              <Avatar seat={seat} view={view} isSpeaker={scene.speaker === id} speakerPos={speakerPos} addressed={scene.addressedTo === id} speakerStance={speakerStance} look={looks[id === MODERATOR_ID ? 'moderador' : id]} />
             </group>
           );
         })}

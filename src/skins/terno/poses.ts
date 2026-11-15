@@ -10,7 +10,7 @@ export type Pose = Partial<Record<Joint, [number, number, number]>>;
 export const POSES: Record<Gesture | 'idle' | 'falando', Pose> = {
   idle: { ombroE: [0, 0, 0.08], ombroD: [0, 0, -0.08], cotoveloE: [-0.15, 0, 0], cotoveloD: [-0.15, 0, 0] },
   falando: { ombroE: [-0.2, 0, 0.12], cotoveloE: [-0.5, 0, 0], ombroD: [-0.45, 0, -0.12], cotoveloD: [-0.9, 0, 0] },
-  // mão alcança o tampo (y≈0.79) a 0.55 à frente; o Avatar sobe/desce o braço em ciclo
+  // mão alcança o tampo do púlpito (y≈1.05) ~0.55 à frente; o Avatar sobe/desce o braço em ciclo
   bater_na_mesa: { tronco: [0.35, 0, 0], cabeca: [0.1, 0, 0], ombroD: [-1.2, 0, 0], cotoveloD: [-0.1, 0, 0], ombroE: [-0.3, 0, 0.1], cotoveloE: [-0.3, 0, 0] },
   apontar: { tronco: [0.08, 0, 0], ombroD: [-1.5, 0.15, 0], cotoveloD: [0, 0, 0], ombroE: [0, 0, 0.08], cotoveloE: [-0.15, 0, 0] },
   // cotovelo [-π/2, 0, φ] deixa o antebraço na horizontal, apontando para (sin φ, 0, cos φ)
