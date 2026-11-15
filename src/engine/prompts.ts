@@ -189,6 +189,7 @@ export function buildClosingMessages(config: DebateConfig, state: DebateState, n
       role: 'user',
       content: [
         `Tema: ${tema(config)}`,
+        dossieBlock(config, state, MODERATOR_ID),
         state.summary ? `Resumo: ${state.summary}` : '',
         `Últimas falas:\n${historyLines(config, state, HISTORY_WINDOW)}`,
       ]

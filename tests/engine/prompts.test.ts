@@ -98,6 +98,12 @@ describe('data e dossiê nos prompts', () => {
     ])
       expect(text(m)).toContain('Hoje é 14/11/2026.');
   });
+  it('resumo e encerramento recebem o dossiê', async () => {
+    const { buildSummaryMessages, buildClosingMessages } = await import('@/engine/prompts');
+    const c = withD();
+    expect(text(buildSummaryMessages(c, st()))).toContain('fato-dois');
+    expect(text(buildClosingMessages(c, st()))).toContain('fato-dois');
+  });
   it('sem dossiê usa a data injetada', async () => {
     const { buildSummaryMessages, hojeDe } = await import('@/engine/prompts');
     const c = mk();
