@@ -4,49 +4,65 @@ import demo from '@/replays/demo-1.json';
 import { parseReplay } from '@/client/replay';
 import { initialScene, sceneReducer } from '@/scene/sceneReducer';
 
-describe('seatPositions (arco)', () => {
-  const n = 5;
-  const radius = 3;
-  const ps = seatPositions(n, radius);
-  const dist = (a: SeatPose, b: SeatPose) => Math.hypot(a.position[0] - b.position[0], a.position[2] - b.position[2]);
+const dist = (a: SeatPose, b: SeatPose) => Math.hypot(a.position[0] - b.position[0], a.position[2] - b.position[2]);
+const NS = [2, 3, 4, 5, 6, 7, 8, 9];
 
+describe('seatPositions (arco aberto para a câmera)', () => {
   it('moderador no fundo, olhando para +Z', () => {
-    expect(ps).toHaveLength(n);
-    expect(ps[0].position[0]).toBeCloseTo(0);
-    expect(ps[0].position[2]).toBeCloseTo(-radius);
-    expect(ps[0].rotationY).toBeCloseTo(0);
-  });
-
-  it('membros em arco à frente do moderador, simétricos, no raio', () => {
-    for (const p of ps.slice(1)) {
-      expect(p.position[2]).toBeGreaterThan(ps[0].position[2]);
-      expect(Math.hypot(p.position[0], p.position[2])).toBeCloseTo(radius);
-    }
-    for (let i = 1; i < n; i++) expect(ps[i].position[0]).toBeCloseTo(-ps[n - i].position[0]);
-  });
-
-  it('rotationY aponta para a origem', () => {
-    for (const p of ps) {
-      const dir = [Math.sin(p.rotationY), Math.cos(p.rotationY)];
-      expect((p.position[0] * dir[0] + p.position[2] * dir[1]) / radius).toBeCloseTo(-1);
+    for (const n of NS) {
+      const r = defaultRadius(n);
+      const ps = seatPositions(n, r);
+      expect(ps).toHaveLength(n);
+      expect(ps[0].position[0]).toBeCloseTo(0);
+      expect(ps[0].position[2]).toBeCloseTo(-r);
+      expect(ps[0].rotationY).toBeCloseTo(0);
     }
   });
 
-  it('um único membro fica em 0° (frente)', () => {
-    const q = seatPositions(2, radius)[1];
-    expect(q.position[0]).toBeCloseTo(0);
-    expect(q.position[2]).toBeCloseTo(radius);
+  it('membros no raio, olhando para a origem, nenhum de costas para a câmera (z <= 0.25·r)', () => {
+    for (const n of NS) {
+      const r = defaultRadius(n);
+      for (const p of seatPositions(n, r).slice(1)) {
+        const [x, , z] = p.position;
+        expect(Math.hypot(x, z)).toBeCloseTo(r);
+        expect((x * Math.sin(p.rotationY) + z * Math.cos(p.rotationY)) / r).toBeCloseTo(-1);
+        expect(z, `n=${n}`).toBeLessThanOrEqual(0.25 * r);
+      }
+    }
   });
 
-  it('espaçamento entre vizinhos >= 1.1 com o raio padrão (n = 3..9)', () => {
-    for (let k = 3; k <= 9; k++) {
-      const s = seatPositions(k, defaultRadius(k));
-      for (let i = 2; i < k; i++) expect(dist(s[i], s[i - 1])).toBeGreaterThanOrEqual(1.1);
+  it('dos dois lados do moderador, simétricos, extra à esquerda', () => {
+    for (const n of NS) {
+      const ms = seatPositions(n, defaultRadius(n)).slice(1).map((p) => p.position);
+      const left = ms.filter(([x]) => x < 0);
+      const right = ms.filter(([x]) => x > 0);
+      expect(left.length - right.length, `n=${n}`).toBe((n - 1) % 2);
+      // espelho, de dentro para fora
+      const l = [...left].reverse();
+      right.forEach(([x, , z], i) => {
+        expect(x).toBeCloseTo(-l[i][0]);
+        expect(z).toBeCloseTo(l[i][2]);
+      });
+    }
+  });
+
+  it('ordem dos assentos = esquerda → direita vista da câmera (borda do piso, +Z)', () => {
+    for (const n of NS) {
+      const camZ = studioSize(defaultRadius(n)) / 2;
+      const xs = seatPositions(n, defaultRadius(n)).slice(1).map(({ position: [x, , z] }) => Math.atan2(x, camZ - z));
+      for (let i = 1; i < xs.length; i++) expect(xs[i], `n=${n}`).toBeGreaterThan(xs[i - 1]);
+    }
+  });
+
+  it('espaçamento >= 1.1 entre todos, inclusive o moderador', () => {
+    for (const n of NS) {
+      const s = seatPositions(n, defaultRadius(n));
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) expect(dist(s[i], s[j]), `n=${n} ${i}-${j}`).toBeGreaterThanOrEqual(1.1);
     }
   });
 
   it('studioSize cabe o arco', () => {
-    expect(studioSize(defaultRadius(9))).toBeGreaterThan(2 * defaultRadius(9) + 4);
+    for (const n of NS) expect(studioSize(defaultRadius(n))).toBeGreaterThan(2 * defaultRadius(n) + 4);
   });
 });
 

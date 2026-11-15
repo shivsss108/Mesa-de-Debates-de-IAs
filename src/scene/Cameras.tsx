@@ -78,7 +78,7 @@ const CLOSE_DIST = 1.9; // m à frente do alvo (plano médio fechado; 1.6 no fim
 const CLOSE_MAX = 3; // retrato afasta o close, até aqui
 /** Centro da cabeça acima do assento: HIP 0.95 + NECK_Y 0.6 + 0.2 (src/skins/terno/Avatar.tsx); igual para moderador e membros. */
 const HEAD_Y = 1.75;
-const CLOSE_SIDE = (25 * Math.PI) / 180; // 3/4, deslocado para o centro do arco
+const CLOSE_SIDE = (25 * Math.PI) / 180; // 3/4, deslocado para o lado da câmera (+Z)
 const PUSH_IN = 0.3; // m de aproximação ao longo da fala
 
 function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | 'radius'>) {
@@ -120,7 +120,8 @@ function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | '
     } else {
       // frente do alvo: moderador olha +Z; membros olham para a origem
       const fwd = shot.target === MODERATOR_ID ? 0 : Math.atan2(-p[0], -p[2]);
-      const ang = fwd + (p[0] > 0.01 ? -CLOSE_SIDE : CLOSE_SIDE); // gira para o lado do centro do arco
+      // gira para o lado da câmera (+Z): rosto de 3/4 e, atrás do orador, o fundo curvo (não o vazio da frente)
+      const ang = fwd + (p[0] < -0.01 ? -CLOSE_SIDE : CLOSE_SIDE);
       const goal = shot.kind === 'close' && !reduced.current ? PUSH_IN * progress : 0;
       push.current += (goal - push.current) * (1 - Math.exp(-3 * dt)); // suaviza os saltos palavra a palavra
       const d = closeDist - push.current;
