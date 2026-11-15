@@ -13,6 +13,14 @@
 .hands ul { list-style: none; display: grid; gap: 2px; }
 .hands li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reason { color: var(--muted); }
+/* gaveta da transcrição aberta (desktop): a fila vai para a esquerda dela em vez de ficar coberta */
+@media (min-width: 600px) {
+  .root:has(~ :global(#transcricao)) .hands { top: 84px; right: calc(min(360px, 100vw - 24px) + 24px); width: min(280px, calc(100vw - 408px)); }
+}
+/* abaixo de ~956px a fila deslocada cai onde o cartão do membro aparece: a fila tem prioridade */
+@media (min-width: 600px) and (max-width: 959px) {
+  .root:has(~ :global(#transcricao)):has(.hands) .card { display: none; }
+}
 
 /* nome na cor do membro, clareado para manter contraste AA sobre o painel */
 .name { font-weight: 700; color: color-mix(in srgb, var(--cor, var(--accent)) 55%, #fff); }
@@ -57,6 +65,7 @@
 @media (max-width: 599px) {
   .hands { top: 84px; }
   .card { top: 84px; width: min(280px, calc(100vw - 24px)); }
+  .root:has(.hands) .card { display: none; } /* celular: cartão e fila ocupariam o mesmo lugar; a fila tem prioridade */
   .sep, .wide { display: none; }
   .btn { padding: 0 10px; font-size: 12px; }
 }

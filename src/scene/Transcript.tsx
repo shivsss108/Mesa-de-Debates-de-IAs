@@ -5,6 +5,7 @@ import { memberName } from '@/scene/names';
 import { corStyle } from '@/scene/Hud';
 import h from './Hud.module.css';
 import s from './Transcript.module.css';
+import o from './overlays.module.css';
 
 export function Transcript({ scene }: { scene: SceneState }) {
   const [wantOpen, setOpen] = useState(false);
@@ -21,6 +22,8 @@ export function Transcript({ scene }: { scene: SceneState }) {
       <button type="button" className={s.toggle} aria-expanded={open} aria-controls="transcricao" onClick={() => { setOpen(!open); setErrSeen(scene.error); }}>
         Transcrição
       </button>
+      {/* alerta sempre montado: o anúncio não depende da gaveta estar aberta */}
+      <p role="alert" className={o.sr}>{scene.error}</p>
       {open && (
         <aside id="transcricao" aria-label="Transcrição" className={s.drawer}>
           <h2>Transcrição</h2>
@@ -35,7 +38,7 @@ export function Transcript({ scene }: { scene: SceneState }) {
               <p>{scene.ended.verdict}</p>
             </section>
           )}
-          {scene.error && <p role="alert" className={s.error}>{scene.error}</p>}
+          {scene.error && <p className={s.error}>{scene.error}</p>}
           <div ref={end} />
         </aside>
       )}
