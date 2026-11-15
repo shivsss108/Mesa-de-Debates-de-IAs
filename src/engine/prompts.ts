@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/providers/client';
 import { resolveExpertise } from '@/presets/expertises';
 import { resolveTemperamento } from '@/presets/temperamentos';
-import { EMOTIONS, GESTURES, MODERATOR_ID, offlineIds } from '@/types';
+import { EMOTIONS, GESTURES, MAX_BUSCAS, MODERATOR_ID, offlineIds } from '@/types';
 import type { DebateConfig, DebateState, Seat } from '@/types';
 
 export const HISTORY_WINDOW = 6;
@@ -45,7 +45,7 @@ export function dossieBlock(config: DebateConfig, state: DebateState, quem: stri
     if (dividido) tail.push('Você tem só parte das informações; outros podem saber fatos que você não sabe.');
   }
   if (extras.length)
-    tail.push('Pesquisado durante o debate:', ...extras.map((f) => `- [${f.id}] (por ${f.porMembro ? nameOf(config, f.porMembro) : 'membro'}) ${f.titulo}`));
+    tail.push('Pesquisado durante o debate:', ...extras.map((f) => `- [${f.id}] (por ${f.porMembro ? nameOf(config, f.porMembro) : 'membro'}) ${f.titulo}${f.resumo ? ` — ${f.resumo}` : ''}`));
   const recorte = d?.modo === 'recorte' ? d.recortes?.[quem] : undefined;
   if (recorte) tail.push(`Destaque para a sua área: ${recorte}`);
   const render = (n: number) => [...head, ...(n ? ['Fatos:', ...fatoLines.slice(0, n)] : []), ...tail].join('\n');
@@ -66,7 +66,15 @@ function historyLines(config: DebateConfig, state: DebateState, n: number): stri
     .join('\n');
 }
 
-export function buildMemberMessages(config: DebateConfig, state: DebateState, seat: Seat, address: string, now?: Date): ChatMessage[] {
+export function buildMemberMessages(
+  config: DebateConfig,
+  state: DebateState,
+  seat: Seat,
+  address: string,
+  now?: Date,
+  opts: { allowSearch?: boolean } = {},
+): ChatMessage[] {
+  const busca = config.membrosPesquisam && opts.allowSearch && state.buscasFeitas < MAX_BUSCAS;
   const others = config.seats.filter((s) => s.id !== seat.id);
   const ids = others.map((s) => `${s.nome} (${s.id})`).join(', ');
   const system = [
@@ -83,6 +91,7 @@ export function buildMemberMessages(config: DebateConfig, state: DebateState, se
     '  Exemplo: [duvida|apontar|alvo:' + (others[0]?.id ?? 'ninguem') + '|posição:-0.7] Seu texto aqui.',
     '- Seu conhecimento pode estar desatualizado. Para fatos recentes, use só o repertório. Se algo não está nele, diga que não sabe ou deixe claro que é opinião. Nunca invente datas, números ou declarações.',
     '- Não cite códigos de fonte como "(S2)" na fala; fale naturalmente.',
+    busca ? '- Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>].' : '',
     resolveExpertise(seat.expertise).promptSnippet,
     resolveTemperamento(seat.temperamento).promptSnippet,
   ]

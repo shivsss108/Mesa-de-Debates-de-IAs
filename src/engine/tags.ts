@@ -36,6 +36,13 @@ export function parseTag(raw: string, memberIds: string[]): ParsedTag {
   return out;
 }
 
+const SEARCH_RE = /^\s*\[busca:([^\]]{0,200})\]/i;
+
+/** Consulta de um `[busca: …]` no início da resposta (aparada, ≤ 120 chars), senão `null`. */
+export function parseSearchTag(raw: string): string | null {
+  return SEARCH_RE.exec(raw)?.[1].trim().slice(0, 120) || null;
+}
+
 /** Holds the stream start until the tag closes with `]` (or 200 chars without it). */
 export class TagStreamSplitter {
   private buf = '';

@@ -51,3 +51,31 @@ describe('createInitialState', () => {
     expect(s.buscasFeitas).toBe(0);
   });
 });
+
+describe('validateStepBody + repertório extra (vem do cliente)', () => {
+  const fonte = (over: object = {}) => ({ id: 'S1', titulo: 't', origem: 'membro', porMembro: 'm1', ...over });
+  const withState = (over: object) => validateStepBody({ ...body(cfg), state: { ...createInitialState(cfg, 0), ...over } });
+  it('aceita fontes válidas e buscas no limite', () =>
+    expect(withState({ repertorioExtra: { fontes: [fonte({ resumo: 'r'.repeat(300) })] }, buscasFeitas: 6 }).ok).toBe(true));
+  it('campos ausentes (cliente antigo) viram vazio/0', () => {
+    const st = createInitialState(cfg, 0) as Partial<ReturnType<typeof createInitialState>>;
+    delete st.repertorioExtra;
+    delete st.buscasFeitas;
+    const v = validateStepBody({ ...body(cfg), state: st });
+    expect(v.ok && v.value.state.repertorioExtra).toEqual({ fontes: [] });
+    expect(v.ok && v.value.state.buscasFeitas).toBe(0);
+  });
+  it('rejeita repertório malformado', () => {
+    for (const repertorioExtra of [
+      null, { fontes: 'x' }, { fontes: Array.from({ length: 25 }, (_, i) => fonte({ id: `S${i}` })) },
+      { fontes: [fonte({ titulo: 't'.repeat(121) })] }, { fontes: [fonte({ resumo: 'r'.repeat(301) })] },
+      { fontes: [fonte({ origem: 'x' })] }, { fontes: [fonte({ id: 5 })] }, { fontes: [fonte({ url: 5 })] },
+    ])
+      expect(withState({ repertorioExtra }).ok).toBe(false);
+  });
+  it('rejeita buscasFeitas fora de 0..6', () => {
+    for (const buscasFeitas of [-1, 7, 1.5, '1']) expect(withState({ buscasFeitas }).ok).toBe(false);
+  });
+  it('dossiê: resumo de fonte ≤ 300', () =>
+    expect(ok({ ...cfg, dossie: dossie({ fontes: [{ id: 'S1', titulo: 't', origem: 'web', resumo: 'r'.repeat(301) }] }) })).toBe(false));
+});

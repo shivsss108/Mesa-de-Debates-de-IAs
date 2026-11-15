@@ -2,9 +2,11 @@ import { ProviderError, type ChatFn, type ChatMessage } from '@/providers/client
 import { PROVIDERS } from '@/providers/table';
 import { resolveKey } from '@/providers/catalog';
 import { resolveTemperamento } from '@/presets/temperamentos';
-import { MODERATOR_ID, offlineIds } from '@/types';
-import type { DebateConfig, DebateEvent, DebateState, ProviderId } from '@/types';
-import { parseTag, TagStreamSplitter, type ParsedTag } from './tags';
+import { MAX_BUSCAS, MODERATOR_ID, offlineIds } from '@/types';
+import type { DebateConfig, DebateEvent, DebateState, Fonte, ProviderId } from '@/types';
+import { quickSearch } from '@/research/quickSearch';
+import type { NewsItem } from '@/research/search';
+import { parseSearchTag, parseTag, TagStreamSplitter, type ParsedTag } from './tags';
 import { computeHands } from './urge';
 import { buildClosingMessages, buildMemberMessages, buildModeratorMessages, buildSummaryMessages } from './prompts';
 import { parseClosing, parseModeratorDecision, resolveTarget, type ModeratorDecision } from './moderator';
@@ -15,6 +17,8 @@ export interface StepDeps {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
   signal?: AbortSignal;
+  /** busca rápida dos membros (default `quickSearch`) */
+  search?: (q: string, idioma: string) => Promise<NewsItem[]>;
 }
 
 export const BACKOFF_MS = [1000, 2000, 4000];
@@ -158,7 +162,9 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     const seat = config.seats.find((x) => x.id === m)!;
     const others = config.seats.filter((x) => x.id !== m).map((x) => x.id);
     const address = fala ? `O Moderador se dirigiu a você: "${fala}"` : 'É a sua vez de falar.';
-    const messages = buildMemberMessages(config, s, seat, address);
+    // 1 busca por turno, MAX_BUSCAS por debate
+    let allowSearch = !!config.membrosPesquisam && s.buscasFeitas < MAX_BUSCAS;
+    let messages = buildMemberMessages(config, s, seat, address, undefined, { allowSearch });
     const turnStart: Body = { type: 'turn_start', speaker: m, ...(fala ? { addressedTo: MODERATOR_ID } : {}) };
     yield { type: 'status', member: m, state: 'pensando' };
 
@@ -170,6 +176,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
       let fed = 0;
       let started = false;
       let errored = false;
+      let query: string | null = null;
       try {
         const apiKey = await gate(seat.provider);
         const req = { provider: seat.provider, model: seat.model, messages, apiKey, signal: deps.signal, maxTokens: MEMBER_MAX_TOKENS };
@@ -179,6 +186,8 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
           if (visible === null) continue; // ainda dentro de <think>: não vai para o balão
           let out = splitter.push(visible.slice(fed));
           fed = visible.length;
+          // o splitter segura o "[...]" inicial: decide a busca antes de qualquer token
+          if (allowSearch && !started && (query = parseSearchTag(splitter.tagRaw() ?? ''))) break;
           if (!started) {
             out = out.trimStart();
             if (!out) continue;
@@ -192,6 +201,30 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
         if (fatal(e)) throw e;
         errored = true;
         lastErr = e;
+      }
+      if (query) {
+        allowSearch = false;
+        yield { type: 'research', member: m, query };
+        const search = deps.search ?? ((q: string, idioma: string) => quickSearch(q, idioma, { signal: deps.signal }));
+        const items = await search(query, config.idioma).catch((): NewsItem[] => []);
+        s.buscasFeitas++;
+        let k = Math.max(0, ...[...(config.dossie?.fontes ?? []), ...s.repertorioExtra.fontes].map((f) => Number(/^S(\d+)$/.exec(f.id)?.[1] ?? 0)));
+        const fontes: Fonte[] = items.map((n) => ({
+          id: `S${++k}`,
+          titulo: n.titulo.slice(0, 120),
+          ...(n.resumo ? { resumo: n.resumo.slice(0, 300) } : {}),
+          ...(n.veiculo ? { veiculo: n.veiculo } : {}),
+          ...(n.url ? { url: n.url } : {}),
+          ...(n.data ? { data: n.data } : {}),
+          origem: 'membro',
+          porMembro: m,
+        }));
+        s.repertorioExtra = { fontes: [...s.repertorioExtra.fontes, ...fontes] };
+        yield { type: 'research', member: m, query, fontes };
+        const aviso = fontes.length ? '' : `\n\nA busca não encontrou nada sobre '${query}'.`;
+        messages = buildMemberMessages(config, s, seat, address + aviso, undefined, { allowSearch: false });
+        i--; // a busca não gasta tentativa: a nova chamada tem o laço inteiro de retries
+        continue;
       }
       const p = parseTag(afterThink(raw) ?? '', others);
       // ponytail: stream que cai depois de já ter mostrado texto vira um turno truncado (evita turn_start sem turn_end)

@@ -27,6 +27,7 @@ export interface Seat {
 export interface Fonte {
   id: string; // 'S1', 'S2', … (extras: 'S7'…)
   titulo: string;
+  resumo?: string; // ≤ 300 chars (buscas de membros)
   veiculo?: string;
   url?: string;
   data?: string; // ISO, quando o RSS/página informa

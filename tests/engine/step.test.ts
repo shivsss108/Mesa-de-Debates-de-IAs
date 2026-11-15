@@ -387,3 +387,87 @@ describe('createInitialState', () => {
     });
   });
 });
+
+describe('membros pesquisam', () => {
+  const RULE = 'Se precisar de um fato que não está no repertório, responda APENAS [busca: <consulta curta>].';
+  const pesq: DebateConfig = {
+    ...cfg,
+    membrosPesquisam: true,
+    dossie: {
+      geradoEm: '2026-11-14', premissa: { status: 'confirmada', nota: 'ok' }, fatos: [], disputas: [], modo: 'todos',
+      fontes: [{ id: 'S1', titulo: 'a', origem: 'web' }, { id: 'S3', titulo: 'b', origem: 'web' }],
+    },
+  };
+  const mod = () => decision({ acao: 'passar_palavra', para: 'm1', fala: '' });
+  const item = (titulo: string) => ({ titulo, resumo: 'r'.repeat(400), veiculo: 'V', url: 'https://x.test/' + titulo });
+  const sys = (c: { messages: ChatMessage[] }) => c.messages.map((x) => x.content).join('\n');
+
+  it('[busca: q] → research, busca, 2ª chamada sem a regra e com o repertório', async () => {
+    const { chat, calls } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': [['[bus', 'ca: q] e mais'], '[feliz] Achei.'] });
+    const search = vi.fn(async () => [item('T1'), item('T2')]);
+    const { events, state } = await run(pesq, fresh(), makeDeps(chat, { search }).deps);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledWith('q', 'pt-BR');
+    const r = events.findIndex((e) => e.type === 'research');
+    const ts = events.findIndex((e) => e.type === 'turn_start' && e.speaker === 'm1');
+    expect(events[r]).toEqual(expect.objectContaining({ type: 'research', member: 'm1', query: 'q' }));
+    expect(events[r]).not.toHaveProperty('fontes');
+    expect(events[r + 1]).toMatchObject({ type: 'research', member: 'm1', query: 'q', fontes: [{ id: 'S4' }, { id: 'S5' }] });
+    expect(r + 1).toBeLessThan(ts);
+    expect(events.some((e) => e.type === 'token' && e.text.includes('[busca'))).toBe(false);
+    expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm1')).toMatchObject({ fullText: 'Achei.' });
+    const member = calls.filter((c) => c.route === 'groq:g1');
+    expect(member).toHaveLength(2);
+    expect(sys(member[0])).toContain(RULE);
+    expect(sys(member[1])).not.toContain(RULE);
+    expect(sys(member[1])).toContain('Pesquisado durante o debate:');
+    expect(sys(member[1])).toContain('T1 — ' + 'r'.repeat(300));
+    expect(state.buscasFeitas).toBe(1);
+    expect(state.repertorioExtra.fontes).toHaveLength(2);
+    expect(state.repertorioExtra.fontes[0]).toEqual({
+      id: 'S4', titulo: 'T1', resumo: 'r'.repeat(300), veiculo: 'V', url: 'https://x.test/T1', origem: 'membro', porMembro: 'm1',
+    });
+  });
+
+  it('ids seguem o repertório extra já existente', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': ['[busca: q]', 'Ok.'] });
+    const st0 = { ...fresh(), buscasFeitas: 2, repertorioExtra: { fontes: [{ id: 'S9', titulo: 'x', origem: 'membro' as const, porMembro: 'm2' }] } };
+    const { state } = await run(pesq, st0, makeDeps(chat, { search: async () => [item('T')] }).deps);
+    expect(state.repertorioExtra.fontes.map((f) => f.id)).toEqual(['S9', 'S10']);
+    expect(state.buscasFeitas).toBe(3);
+  });
+
+  it('2ª resposta com [busca: …] vira texto normal, sem 2ª busca', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': ['[busca: q]', '[busca: outra] Mesmo assim.'] });
+    const search = vi.fn(async () => [item('T')]);
+    const { events, state } = await run(pesq, fresh(), makeDeps(chat, { search }).deps);
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(events.filter((e) => e.type === 'research')).toHaveLength(2);
+    expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm1')).toMatchObject({ fullText: 'Mesmo assim.' });
+    expect(events.some((e) => e.type === 'token' && e.text.includes('[busca'))).toBe(false);
+    expect(state.buscasFeitas).toBe(1);
+  });
+
+  it('sem regra com buscasFeitas = 6 ou membrosPesquisam falso; [busca] não dispara busca', async () => {
+    for (const [c, st0] of [[pesq, { ...fresh(), buscasFeitas: 6 }], [{ ...pesq, membrosPesquisam: false }, fresh()]] as const) {
+      const { chat, calls } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': ['[busca: q] Texto.'] });
+      const search = vi.fn(async () => [item('T')]);
+      const { events } = await run(c, st0, makeDeps(chat, { search }).deps);
+      expect(sys(calls.find((x) => x.route === 'groq:g1')!)).not.toContain(RULE);
+      expect(search).not.toHaveBeenCalled();
+      expect(events.some((e) => e.type === 'research')).toBe(false);
+      expect(events.find((e) => e.type === 'turn_end' && e.speaker === 'm1')).toMatchObject({ fullText: 'Texto.' });
+    }
+  });
+
+  it('busca vazia ou que lança → aviso na 2ª chamada e conta a busca', async () => {
+    for (const search of [async () => [], async () => { throw new Error('x'); }]) {
+      const { chat, calls } = fakeChat({ 'mistral:mod': [mod()], 'groq:g1': ['[busca: q]', 'Ok.'] });
+      const { events, state } = await run(pesq, fresh(), makeDeps(chat, { search }).deps);
+      expect(sys(calls.filter((x) => x.route === 'groq:g1')[1])).toContain("A busca não encontrou nada sobre 'q'.");
+      expect(events.filter((e) => e.type === 'research')[1]).toMatchObject({ fontes: [] });
+      expect(state.buscasFeitas).toBe(1);
+      expect(state.repertorioExtra.fontes).toEqual([]);
+    }
+  });
+});

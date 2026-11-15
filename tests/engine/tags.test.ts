@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTag, TagStreamSplitter } from '@/engine/tags';
+import { parseSearchTag, parseTag, TagStreamSplitter } from '@/engine/tags';
 
 const ids = ['m1', 'm2'];
 
@@ -59,5 +59,19 @@ describe('TagStreamSplitter', () => {
     const big = '[' + 'a'.repeat(250);
     expect(s.push(big)).toBe(big);
     expect(s.tagRaw()).toBeNull();
+  });
+});
+
+describe('parseSearchTag', () => {
+  it('lê a consulta de [busca: …] no início', () => {
+    expect(parseSearchTag('[busca: Nvidia CEO] x')).toBe('Nvidia CEO');
+    expect(parseSearchTag('  [Busca:   juros hoje  ]')).toBe('juros hoje');
+    expect(parseSearchTag('[busca: ' + 'a'.repeat(150) + ']')).toBe('a'.repeat(120));
+  });
+  it('null quando não é busca', () => {
+    expect(parseSearchTag('[duvida|apontar] texto')).toBeNull();
+    expect(parseSearchTag('texto [busca: x]')).toBeNull();
+    expect(parseSearchTag('[busca:   ]')).toBeNull();
+    expect(parseSearchTag('[busca: sem fechar')).toBeNull();
   });
 });

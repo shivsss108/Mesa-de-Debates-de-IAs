@@ -1,5 +1,5 @@
 import { PROVIDERS } from '@/providers/table';
-import { MODERATOR_ID } from '@/types';
+import { MAX_BUSCAS, MODERATOR_ID } from '@/types';
 import type { DebateConfig, DebateState, ProviderId } from '@/types';
 
 export type Keys = Partial<Record<ProviderId, string>>;
@@ -13,6 +13,10 @@ const STATUS = ['confirmada', 'nao_encontrada', 'contradita'];
 const MODOS = ['todos', 'dividido', 'recorte'];
 const ORIGENS = ['web', 'link', 'arquivo', 'texto', 'membro'];
 const txt = (v: unknown, max: number) => typeof v === 'string' && v.length <= max;
+const optStr = (v: unknown) => v === undefined || typeof v === 'string';
+const fonteOk = (f: unknown, tituloMax = Infinity) =>
+  isObj(f) && str(f.id) && txt(f.titulo, tituloMax) && ORIGENS.includes(f.origem as string) &&
+  (f.resumo === undefined || txt(f.resumo, 300)) && [f.veiculo, f.url, f.data, f.porMembro].every(optStr);
 
 /** Mensagem de erro, ou null se o dossiê é válido (limites da spec §3). */
 export function validateDossie(d: unknown): string | null {
@@ -28,9 +32,7 @@ export function validateDossie(d: unknown): string | null {
       return 'Dossiê: fato inválido.';
   if (!Array.isArray(disputas) || disputas.length > 5 || !disputas.every((x) => txt(x, 200))) return 'Dossiê: disputas inválidas.';
   if (!Array.isArray(fontes) || fontes.length > 12) return 'Dossiê: no máximo 12 fontes.';
-  for (const f of fontes)
-    if (!isObj(f) || !str(f.id) || typeof f.titulo !== 'string' || !ORIGENS.includes(f.origem as string))
-      return 'Dossiê: fonte inválida.';
+  if (!fontes.every((f) => fonteOk(f))) return 'Dossiê: fonte inválida.';
   if (recortes !== undefined && (!isObj(recortes) || !Object.values(recortes).every((x) => txt(x, 400))))
     return 'Dossiê: recorte inválido.';
   if (JSON.stringify(d).length > 8192) return 'Dossiê grande demais (máx. 8 KB).';
@@ -63,6 +65,13 @@ export function validateStepBody(body: unknown): { ok: true; value: StepBody } |
     ids.add(s.id);
   }
   if (!isObj(state) || !Array.isArray(state.history) || !isObj(state.lastCallAt)) return bad('Estado inválido.');
+  // repertório e contador vêm do cliente a cada passo; ausentes (cliente antigo) = vazio/0
+  const repertorioExtra = state.repertorioExtra === undefined ? { fontes: [] } : state.repertorioExtra;
+  if (!isObj(repertorioExtra) || !Array.isArray(repertorioExtra.fontes) || repertorioExtra.fontes.length > 24 || !repertorioExtra.fontes.every((f) => fonteOk(f, 120)))
+    return bad('Repertório inválido.');
+  const buscasFeitas = state.buscasFeitas === undefined ? 0 : state.buscasFeitas;
+  if (!Number.isInteger(buscasFeitas) || (buscasFeitas as number) < 0 || (buscasFeitas as number) > MAX_BUSCAS)
+    return bad('buscasFeitas inválido.');
   if (keys !== undefined && !isObj(keys)) return bad('keys inválido.');
   if (!Number.isInteger(seqStart) || (seqStart as number) < 0) return bad('seqStart inválido.');
   // só provedores conhecidos, strings aparadas, sem vazias
@@ -75,7 +84,7 @@ export function validateStepBody(body: unknown): { ok: true; value: StepBody } |
     ok: true,
     value: {
       config: config as unknown as DebateConfig,
-      state: state as unknown as DebateState,
+      state: { ...state, repertorioExtra, buscasFeitas } as unknown as DebateState,
       keys: clean,
       seqStart: seqStart as number,
     },
