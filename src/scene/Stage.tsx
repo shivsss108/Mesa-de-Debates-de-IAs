@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { MODERATOR_ID } from '@/types';
@@ -11,7 +11,9 @@ import { defaultRadius, seatPositions } from '@/scene/layout';
 import { Studio } from '@/scene/Studio';
 import { Cameras, type CameraMode } from '@/scene/Cameras';
 import { Hud, type StageControls } from '@/scene/Hud';
-import { BubbleAnchor, SpeechBubble } from '@/scene/SpeechBubble';
+import { Caption } from '@/scene/Caption';
+import { LowerThird } from '@/scene/LowerThird';
+import s from '@/scene/overlays.module.css';
 import { Transcript } from '@/scene/Transcript';
 import { typingTarget } from '@/scene/keys';
 import { cancelSpeech } from '@/voice/speech';
@@ -22,7 +24,6 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
   scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode; /** sem HUD nem transcrição (fundo da tela inicial) */ bare?: boolean;
 }) {
   const [mode, setMode] = useState<CameraMode>(defaultCamera);
-  const bubbleRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<string>();
   const cycle = () => setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
 
@@ -83,13 +84,15 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
             </group>
           );
         })}
-        {scene.speaker && speakerPos && (
-          <BubbleAnchor position={[speakerPos[0], 2.3, speakerPos[2]]} target={bubbleRef} />
-        )}
         <Cameras mode={mode} scene={scene} posOf={posOf} radius={radius} />
         {debug && <Stats />}
       </Canvas>
-      {!bare && <SpeechBubble speaker={scene.speaker} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} anchorRef={bubbleRef} />}
+      {!bare && (
+        <div className={s.root}>
+          <LowerThird scene={scene} />
+          <Caption speaker={scene.speaker} turnSeq={scene.turnSeq} override={scene.searching ? `🔎 pesquisando: ${scene.searching}` : undefined} />
+        </div>
+      )}
       {!bare && <Hud scene={scene} controls={controls} camera={mode} onCamera={cycle} hovered={hovered} />}
       {!bare && <Transcript scene={scene} />}
     </div>
