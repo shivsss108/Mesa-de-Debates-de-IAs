@@ -38,7 +38,8 @@ export function dossieBlock(config: DebateConfig, state: DebateState, quem: stri
   const aviso: string[] = [];
   if (d) {
     head.push(`Repertório (pesquisado em ${hojeDe(config)}):`);
-    head.push(`Premissa do tema: ${d.premissa.status} — ${d.premissa.nota}`);
+    // a nota é editável na revisão sem limite próprio: cortada aqui para o cabeçalho nunca expulsar os fatos
+    head.push(`Premissa do tema: ${d.premissa.status} — ${d.premissa.nota.slice(0, 300)}`);
     d.fatos.forEach((f, i) => {
       if (dividido && i % config.seats.length !== seatIdx) return;
       fatos.push(`- ${f.fontes.length ? `[${f.fontes.join(',')}] ` : ''}${f.texto}`);

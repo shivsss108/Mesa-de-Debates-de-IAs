@@ -184,6 +184,13 @@ describe('data e dossiê nos prompts', () => {
     expect(b).toContain('[S39]');
     expect(b).not.toContain('[S10]');
   });
+  it('nota da premissa enorme (editada na revisão) não expulsa os fatos', async () => {
+    const { dossieBlock } = await import('@/engine/prompts');
+    const d = dossie({ premissa: { status: 'confirmada', nota: 'n'.repeat(5000) }, fatos: [{ id: 'F1', texto: 'fato-curto', fontes: ['S1'] }] });
+    const b = dossieBlock(withD(d), st(), 'm1');
+    expect(b.length).toBeLessThanOrEqual(4000);
+    expect(b).toContain('fato-curto');
+  });
   it('fato manual sem fontes não renderiza colchetes vazios', async () => {
     const { dossieBlock } = await import('@/engine/prompts');
     const b = dossieBlock(withD(dossie({ fatos: [{ id: 'F1', texto: 'manual-x', fontes: [], manual: true }] })), st(), 'm1');
