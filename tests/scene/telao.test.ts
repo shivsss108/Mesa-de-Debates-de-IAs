@@ -34,3 +34,9 @@ describe('telaoLines', () => {
     expect(telaoLines({ ...base, turno: 7, orador: 'Ana' }).status).toBe('Turno 7/20 · fala: Ana');
   });
 });
+
+describe('telaoLines sem config', () => {
+  it('maxTurns 0: sem "Turno 0/0"', () => {
+    expect(telaoLines({ ...base, turno: 0, maxTurns: 0 }).status).toBe('');
+  });
+});

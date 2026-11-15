@@ -49,7 +49,7 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
         <span className={s.turn}>Turno {scene.memberTurns}/{c?.maxTurns ?? '–'}</span>
       </div>
 
-      {scene.hands.length > 0 && (
+      {scene.hands.length > 0 && !scene.ended && (
         <section className={`${s.panel} ${s.hands}`} aria-label="Pedindo a palavra">
           <h2>Pedindo a palavra</h2>
           <ul>
@@ -61,12 +61,6 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
             ))}
           </ul>
         </section>
-      )}
-
-      {hasSources && srcOpen && (
-        <div id="painel-fontes" className={`${s.panel} ${s.sources}`}>
-          <Sources dossie={c?.dossie} extra={scene.extraSources} config={c} />
-        </div>
       )}
 
       {hovered && <HoverCard scene={scene} id={hovered} />}
@@ -100,6 +94,13 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
           Encerrar
         </button>
       </div>
+
+      {/* depois da barra no DOM: ao abrir "Fontes", o Tab seguinte cai nos links; posição visual vem do CSS */}
+      {hasSources && srcOpen && (
+        <div id="painel-fontes" className={`${s.panel} ${s.sources}`}>
+          <Sources dossie={c?.dossie} extra={scene.extraSources} config={c} />
+        </div>
+      )}
     </div>
   );
 }

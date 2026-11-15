@@ -21,7 +21,7 @@ import { cancelSpeech } from '@/voice/speech';
 
 const MODES: CameraMode[] = ['diretor', 'orbita', 'livre'];
 
-export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbita', bare = false }: {
+export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'diretor', bare = false }: {
   scene: SceneState; skin?: Skin; controls: StageControls; defaultCamera?: CameraMode; /** sem HUD nem transcrição (fundo da tela inicial) */ bare?: boolean;
 }) {
   const [mode, setMode] = useState<CameraMode>(defaultCamera);
@@ -29,17 +29,6 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
   const cycle = () => setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
 
   useEffect(cancelSpeech, [scene.config]); // novo debate/replay: esquece a fala do anterior
-
-  // relógio do programa (telão): zera a cada debate_start, tique de 1 s
-  const [elapsedMs, setElapsedMs] = useState(0);
-  useEffect(() => {
-    const t0 = performance.now();
-    const id = setInterval(() => setElapsedMs(performance.now() - t0), 1000);
-    return () => {
-      clearInterval(id);
-      setElapsedMs(0);
-    };
-  }, [scene.config]);
 
   const [debug] = useState(() => location.search.includes('debug')); // Stage só roda no cliente (dynamic ssr:false)
 
@@ -68,7 +57,7 @@ export function Stage({ scene, skin = ternoSkin, controls, defaultCamera = 'orbi
     <div style={{ position: 'fixed', inset: 0, background: '#0b1426' }}>
       <Canvas camera={{ position: [0, 3.2, radius + 3], fov: 55 }} dpr={[1, 2]}>
         <color attach="background" args={['#0b1426']} />
-        <Studio radius={radius} seats={seats} speakerId={scene.speaker} elapsedMs={elapsedMs} scene={scene} />
+        <Studio radius={radius} seats={seats} speakerId={scene.speaker} scene={scene} />
         {ids.map((id, i) => {
           const view = scene.members[id];
           if (!view) return null;

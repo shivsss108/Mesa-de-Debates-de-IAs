@@ -84,7 +84,7 @@ function Live() {
     <>
       <Stage
         scene={d.scene}
-        defaultCamera="orbita"
+        defaultCamera="diretor"
         controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
           onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available, badge: 'AO VIVO' }}
       />

@@ -160,13 +160,25 @@ function Desk() {
 }
 
 /** Telão: redesenha só quando o texto (tema/turno/orador/relógio) muda — relógio ≤ 1×/s. */
-function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; speakerId?: string; elapsedMs: number; position: [number, number, number] }) {
+function Telao({ scene, speakerId, position }: { scene: SceneState; speakerId?: string; position: [number, number, number] }) {
   const mat = useCanvasMat();
   const c = scene.config;
+  // relógio do programa: mora aqui para o tique de 1 s não re-renderizar o palco; zera a cada novo config.
+  // ponytail: não pausa junto com o debate/replay (o estado de pausa é local do Hud); subir o estado se for preciso.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!c) return;
+    const t0 = performance.now();
+    const id = setInterval(() => setElapsedMs(performance.now() - t0), 1000);
+    return () => {
+      clearInterval(id);
+      setElapsedMs(0);
+    };
+  }, [c]);
   const lines = telaoLines({
     tema: c?.tema ?? 'Mesa de IAs',
     turno: scene.memberTurns,
-    maxTurns: c?.maxTurns ?? 0,
+    maxTurns: c?.maxTurns ?? 0, // sem config: status vazio
     orador: speakerId ? memberName(c, speakerId) : undefined,
     elapsedMs,
   });
@@ -267,8 +279,8 @@ function Lights({ target }: { target?: { pos: THREE.Vector3; front: THREE.Vector
   );
 }
 
-export function Studio({ radius, seats, speakerId, elapsedMs, scene }: {
-  radius: number; seats: Seat[]; speakerId?: string; elapsedMs: number; scene: SceneState;
+export function Studio({ radius, seats, speakerId, scene }: {
+  radius: number; seats: Seat[]; speakerId?: string; scene: SceneState;
 }) {
   const n = seats.length + 1;
   const poses = useMemo(() => seatPositions(n, radius), [n, radius]);
@@ -313,7 +325,7 @@ export function Studio({ radius, seats, speakerId, elapsedMs, scene }: {
         <cylinderGeometry args={[wallR - 0.06, wallR - 0.06, 0.06, 64, 1, true, THETA[0], THETA[1]]} />
       </mesh>
       {vStrips.map((p, i) => <mesh key={i} geometry={G.vStrip} material={led(i % 2 ? ACCENT : LED, 1.6)} position={p} />)}
-      <Telao scene={scene} speakerId={speakerId} elapsedMs={elapsedMs} position={[0, 3.5, -radius - 1.9]} />
+      <Telao scene={scene} speakerId={speakerId} position={[0, 3.5, -radius - 1.9]} />
       {/* púlpitos e bancada, posicionados como o avatar do assento */}
       {poses.map((p, i) => (
         <group key={i} position={p.position} rotation-y={p.rotationY}>

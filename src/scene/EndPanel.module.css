@@ -24,4 +24,4 @@
 .primary { background: var(--accent); color: #1c1306; border-color: var(--accent-2); }
 /* ao lado do botão Transcrição (desktop) ou abaixo dele (celular): longe do GC, legenda, barra e gaveta */
 .reopen { position: fixed; z-index: 10; top: 12px; right: 132px; padding: 0 16px; height: 40px; }
-@media (max-width: 599px) { .reopen { top: 60px; right: 12px; } }
+@media (max-width: 599px) { .reopen { top: auto; bottom: calc(var(--controls-h) + 12px); right: 12px; } }

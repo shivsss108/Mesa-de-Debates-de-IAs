@@ -30,7 +30,7 @@ export function telaoLines(input: TelaoInput, maxChars = 38): { tema: string[]; 
   const pad = (v: number) => String(v).padStart(2, '0');
   return {
     tema,
-    status: `Turno ${input.turno}/${input.maxTurns}${input.orador ? ` · fala: ${input.orador}` : ''}`,
+    status: input.maxTurns <= 0 ? '' : `Turno ${input.turno}/${input.maxTurns}${input.orador ? ` · fala: ${input.orador}` : ''}`,
     relogio: `${pad(Math.floor(s / 60))}:${pad(s % 60)}`,
   };
 }
