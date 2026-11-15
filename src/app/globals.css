@@ -1,12 +1,14 @@
 :root {
-  --bg: #0b1f22;
-  --bg-2: #0f2a2e;
-  --panel: rgba(8, 26, 29, 0.82);
-  --line: rgba(232, 241, 241, 0.14);
-  --fg: #e8f1f1;
-  --muted: #94b3b5;
-  --accent: #d9953f;
-  --accent-2: #f0b45e;
+  --bg: #0b1426;
+  --panel: rgba(17, 29, 51, 0.86);
+  --panel-solid: #111d33;
+  --line: rgba(234, 240, 251, 0.14);
+  --fg: #eaf0fb;
+  --muted: #9db0cc;
+  --accent: #ffb23e;
+  --accent-2: #ffc970;
+  --led: #3aa0ff;
+  --live: #ff3b47;
   --danger: #ff8a7a;
 }
 

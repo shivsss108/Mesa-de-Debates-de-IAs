@@ -1,0 +1,8 @@
+.logo { display: inline-flex; align-items: center; gap: 0.6em; font-family: var(--font-display), 'Arial Narrow', sans-serif; font-weight: 700; letter-spacing: 0.04em; line-height: 1; color: var(--fg); text-transform: none; }
+.sm { font-size: 1.15rem; }
+.lg { font-size: clamp(2.4rem, 9vw, 4rem); }
+.ias { color: var(--accent); }
+.badge { display: inline-flex; align-items: center; gap: 0.4em; padding: 0.28em 0.65em; border: 1px solid var(--live); border-radius: 999px; font-size: 0.4em; font-weight: 600; letter-spacing: 0.12em; color: var(--fg); }
+.dot { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }

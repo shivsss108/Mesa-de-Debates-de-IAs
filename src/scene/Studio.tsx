@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
@@ -14,7 +14,27 @@ const BG = '#0b1426';
 const PANEL = '#111d33';
 const ACCENT = '#ffb23e';
 const LED = '#3aa0ff';
-const FONT = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+const FALLBACK = "'Arial Narrow', Arial, sans-serif";
+
+/** Família do next/font (--font-display: o canvas não lê var(), e o nome real é gerado). */
+function displayFont() {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim();
+  return v ? `${v}, ${FALLBACK}` : FALLBACK;
+}
+
+/** Fonte do canvas + contador que muda quando as fontes carregam (para repintar). */
+function useDisplayFont() {
+  const [state, setState] = useState({ font: FALLBACK, tick: 0 });
+  useEffect(() => {
+    let alive = true;
+    const font = displayFont();
+    Promise.all([document.fonts.load(`600 20px ${font}`), document.fonts.load(`700 20px ${font}`)])
+      .catch(() => {})
+      .then(() => alive && setState((s) => ({ font, tick: s.tick + 1 })));
+    return () => { alive = false; };
+  }, []);
+  return state;
+}
 
 /* Materiais e geometrias compartilhados (cache de módulo, como no avatar). */
 const LEDS = new Map<string, THREE.MeshStandardMaterial>();
@@ -74,9 +94,9 @@ function useCanvasMat() {
 }
 
 /** Fonte no maior tamanho ≤ px em que todas as linhas cabem em max (nunca espremer via maxWidth). */
-function fitFont(ctx: CanvasRenderingContext2D, lines: string[], weight: number, px: number, max: number) {
+function fitFont(ctx: CanvasRenderingContext2D, font: string, lines: string[], weight: number, px: number, max: number) {
   for (; px > 12; px -= 2) {
-    ctx.font = `${weight} ${px}px ${FONT}`;
+    ctx.font = `${weight} ${px}px ${font}`;
     if (lines.every((l) => ctx.measureText(l).width <= max)) break;
   }
   return px;
@@ -92,6 +112,7 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, max: number) {
 /** Plaquinha com o nome: desenhada uma vez por nome/cor. */
 function Nameplate({ nome, cor, y, z }: { nome: string; cor: string; y: number; z: number }) {
   const mat = useCanvasMat();
+  const { font, tick } = useDisplayFont();
   useEffect(() => {
     paint(mat.current!, 512, 128, (ctx, W, H) => {
       ctx.fillStyle = '#0a1222';
@@ -99,12 +120,12 @@ function Nameplate({ nome, cor, y, z }: { nome: string; cor: string; y: number; 
       ctx.fillStyle = cor;
       ctx.fillRect(0, 0, 10, H);
       ctx.fillStyle = '#ffffff';
-      ctx.font = `700 76px ${FONT}`;
+      ctx.font = `700 76px ${font}`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'center';
       ctx.fillText(ellipsize(ctx, nome.toUpperCase(), W - 60), W / 2 + 5, H / 2 + 4);
     });
-  }, [mat, nome, cor]);
+  }, [mat, nome, cor, font, tick]);
   return (
     <mesh geometry={G.plate} position={[0, y, z]}>
       <meshStandardMaterial ref={mat} color="#000000" emissiveIntensity={0.9} roughness={0.4} />
@@ -150,6 +171,7 @@ function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; s
     elapsedMs,
   });
   const key = JSON.stringify(lines);
+  const { font, tick } = useDisplayFont();
   useEffect(() => {
     const { tema, status, relogio } = JSON.parse(key) as typeof lines;
     paint(mat.current!, 1280, 720, (ctx, W, H) => {
@@ -162,7 +184,7 @@ function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; s
       ctx.fillStyle = ACCENT;
       ctx.fillRect(0, 0, W, 10);
       ctx.textBaseline = 'middle';
-      ctx.font = `700 54px ${FONT}`;
+      ctx.font = `700 54px ${font}`;
       ctx.fillStyle = ACCENT;
       ctx.textAlign = 'left';
       ctx.fillText('MESA DE IAs', 60, 80);
@@ -176,7 +198,7 @@ function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; s
       // tema
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
-      const px = fitFont(ctx, tema, 700, 92, W - 120);
+      const px = fitFont(ctx, font, tema, 700, 92, W - 120);
       const lh = px * 1.18;
       const y0 = (H - 150 + 130) / 2 - ((tema.length - 1) * lh) / 2; // centrado entre o cabeçalho e o rodapé
       tema.forEach((l, i) => ctx.fillText(l, W / 2, y0 + i * lh));
@@ -186,10 +208,10 @@ function Telao({ scene, speakerId, elapsedMs, position }: { scene: SceneState; s
       ctx.fillStyle = LED;
       ctx.fillRect(0, H - 150, W, 6);
       ctx.fillStyle = '#e6eefc';
-      fitFont(ctx, [status], 600, 58, W - 120);
+      fitFont(ctx, font, [status], 600, 58, W - 120);
       ctx.fillText(status, W / 2, H - 72);
     });
-  }, [mat, key]);
+  }, [mat, key, font, tick]);
   return (
     <group position={position}>
       <mesh position={[0, 0, -0.06]} material={FRAME}>
