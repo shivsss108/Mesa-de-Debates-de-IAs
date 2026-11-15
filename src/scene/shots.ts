@@ -24,17 +24,18 @@ const TELAO_TOP = 4.78;
 const FRONT_LOW = 1.2; // menor altura que aparece no assento da frente (só cabeça e ombros de quem está de costas)
 
 /**
- * Plano aberto: de frente (+Z) e alto, de onde cabe o arco inteiro (extremos em ±100°) e o telão.
- * Recuo pelo fov horizontal (largura) e pelo vertical (púlpito da frente até o topo do telão).
+ * Plano aberto: de frente (+Z), alto e na borda do piso (studioSize/2 = r+3), de onde cabem o arco inteiro e o telão.
+ * Mira na bissetriz entre o assento da frente e o topo do telão, sem nunca cortar o topo do telão.
+ * Retrato: a câmera não sai do estúdio; sobe um pouco e aceita cortar os púlpitos das pontas.
  */
 export function wideFraming(radius: number, aspect: number): { pos: [number, number, number]; look: [number, number, number] } {
   const tanH = Math.tan(FOV / 2) * Math.min(aspect, 16 / 9);
   const halfW = radius + 0.9; // púlpitos dos extremos + margem
   const zEdge = radius * Math.cos((100 * Math.PI) / 180);
-  const h = 4.4 + 0.2 * radius; // alto: olha por cima de quem está de costas para a câmera
-  let z = Math.max(radius + 3, zEdge + halfW / tanH);
-  const span = () => Math.atan2(TELAO_TOP - h, z + radius + 1.9) - Math.atan2(FRONT_LOW - h, z - radius);
-  while (span() > FOV * 0.9) z += 0.1; // ponytail: busca linear, roda só quando muda raio/aspecto
-  const pitch = (Math.atan2(TELAO_TOP - h, z + radius + 1.9) + Math.atan2(FRONT_LOW - h, z - radius)) / 2;
+  const z = radius + 3; // borda do piso
+  const short = Math.max(0, zEdge + halfW / tanH - z); // quanto faltaria recuar para caber a largura
+  const h = 4.4 + 0.2 * radius + Math.min(1.5, 0.3 * short); // alto: olha por cima de quem está de costas
+  const top = Math.atan2(TELAO_TOP - h, z + radius + 1.9);
+  const pitch = Math.max((top + Math.atan2(FRONT_LOW - h, z - radius)) / 2, top - (FOV / 2) * 0.95);
   return { pos: [0, h, z], look: [0, h + Math.tan(pitch) * z, 0] };
 }

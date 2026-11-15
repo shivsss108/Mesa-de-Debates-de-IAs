@@ -74,13 +74,17 @@ function FreeCam({ limit }: { limit: number }) {
   return <PointerLockControls selector="canvas" />;
 }
 
-const CLOSE_DIST = 1.4; // m à frente do alvo
+const CLOSE_DIST = 1.9; // m à frente do alvo (plano médio fechado; 1.6 no fim do push-in)
+const CLOSE_MAX = 3; // retrato afasta o close, até aqui
+/** Centro da cabeça acima do assento: HIP 0.95 + NECK_Y 0.6 + 0.2 (src/skins/terno/Avatar.tsx); igual para moderador e membros. */
+const HEAD_Y = 1.75;
 const CLOSE_SIDE = (25 * Math.PI) / 180; // 3/4, deslocado para o centro do arco
 const PUSH_IN = 0.3; // m de aproximação ao longo da fala
 
 function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | 'radius'>) {
   const aspect = useThree((s) => s.size.width / s.size.height);
   const wide = useMemo(() => wideFraming(radius, aspect), [radius, aspect]);
+  const closeDist = Math.min(CLOSE_MAX, CLOSE_DIST / Math.min(1, aspect / (4 / 3))); // retrato: recua para caber os ombros
   const reduced = useRef(false);
   const turn = useRef<{ seq: number; since?: number; done: boolean }>({ seq: NaN, done: false });
   const push = useRef(0);
@@ -119,9 +123,10 @@ function DirectorCam({ scene, posOf, radius }: Pick<Props, 'scene' | 'posOf' | '
       const ang = fwd + (p[0] > 0.01 ? -CLOSE_SIDE : CLOSE_SIDE); // gira para o lado do centro do arco
       const goal = shot.kind === 'close' && !reduced.current ? PUSH_IN * progress : 0;
       push.current += (goal - push.current) * (1 - Math.exp(-3 * dt)); // suaviza os saltos palavra a palavra
-      const d = CLOSE_DIST - push.current;
-      cam.current.set(p[0] + Math.sin(ang) * d, 1.8, p[2] + Math.cos(ang) * d);
-      look.current.set(p[0], 1.6, p[2]);
+      const d = closeDist - push.current;
+      const head = p[1] + HEAD_Y;
+      cam.current.set(p[0] + Math.sin(ang) * d, head + 0.05, p[2] + Math.cos(ang) * d);
+      look.current.set(p[0], head - 0.15, p[2]); // queixo/pescoço: cabeça inteira com folga em cima
     }
     camera.position.copy(cam.current);
     camera.lookAt(look.current);
