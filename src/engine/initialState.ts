@@ -14,6 +14,8 @@ export function createInitialState(config: DebateConfig, now: number): DebateSta
     hands: [],
     lastCallAt: {},
     stalledSteps: 0,
+    repertorioExtra: { fontes: [] },
+    buscasFeitas: 0,
     done: false,
   };
 }

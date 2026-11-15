@@ -72,6 +72,8 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
       return { ...s, summary: e.text };
     case 'debate_end':
       return { ...s, ended: e, speaker: undefined, addressedTo: undefined, bubble: '' };
+    case 'research':
+      return s;
     case 'error':
       return { ...s, error: e.message };
   }

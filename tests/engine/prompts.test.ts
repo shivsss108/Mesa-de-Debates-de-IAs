@@ -22,7 +22,7 @@ const mk = (tema = 'Tema X'): DebateConfig => ({
 });
 const st = (over: Partial<DebateState> = {}): DebateState => ({
   startedAt: 0, memberTurns: 0, summary: '', history: [], stances: {}, lastSpokeTurn: {}, stalledSteps: 0,
-  failures: {}, moderatorFailures: 0, offline: {}, hands: [], lastCallAt: {}, done: false, ...over,
+  failures: {}, moderatorFailures: 0, offline: {}, hands: [], lastCallAt: {}, repertorioExtra: { fontes: [] }, buscasFeitas: 0, done: false, ...over,
 });
 const text = (m: { content: string }[]) => m.map((x) => x.content).join('\n');
 

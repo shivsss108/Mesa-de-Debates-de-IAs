@@ -24,12 +24,36 @@ export interface Seat {
   expertise: PersonaRef;
 }
 
+export interface Fonte {
+  id: string; // 'S1', 'S2', … (extras: 'S7'…)
+  titulo: string;
+  veiculo?: string;
+  url?: string;
+  data?: string; // ISO, quando o RSS/página informa
+  origem: 'web' | 'link' | 'arquivo' | 'texto' | 'membro';
+  porMembro?: string; // seatId, só origem 'membro'
+}
+
+export interface Dossie {
+  geradoEm: string; // 'YYYY-MM-DD'
+  premissa: { status: 'confirmada' | 'nao_encontrada' | 'contradita'; nota: string };
+  fatos: { id: string; texto: string; fontes: string[]; manual?: boolean }[]; // ≤ 12, texto ≤ 300 chars
+  disputas: string[]; // ≤ 5, ≤ 200 chars cada
+  fontes: Fonte[]; // ≤ 12
+  modo: 'todos' | 'dividido' | 'recorte';
+  recortes?: Record<string, string>; // seatId → destaque (≤ 400 chars), só modo recorte
+}
+
+export const MAX_BUSCAS = 6;
+
 export interface DebateConfig {
   tema: string;
   idioma: string;
   maxTurns: number;
   moderador: { provider: ProviderId; model: string; provocacao: 'baixa' | 'media' | 'alta' };
   seats: Seat[];
+  dossie?: Dossie;
+  membrosPesquisam?: boolean;
 }
 
 export interface HandEntry {
@@ -53,6 +77,9 @@ export interface DebateState {
   lastCallAt: Partial<Record<ProviderId, number>>;
   /** passos seguidos sem turno de membro com sucesso (estado antigo sem o campo = 0) */
   stalledSteps: number;
+  /** fontes pesquisadas por membros durante o debate */
+  repertorioExtra: { fontes: Fonte[] };
+  buscasFeitas: number;
   done: boolean;
   pendingAddress?: { to: string; text: string };
 }
@@ -69,6 +96,7 @@ export type DebateEvent = { seq: number; t: number } & (
   | { type: 'status'; member: string; state: 'pensando' | 'sem_sinal' | 'ok'; reason?: string }
   | { type: 'summary_update'; text: string }
   | { type: 'debate_end'; summary: string; consensus: string[]; openPoints: string[]; verdict: string }
+  | { type: 'research'; member: string; query: string; fontes?: Fonte[] }
   | { type: 'error'; message: string }
 );
 
