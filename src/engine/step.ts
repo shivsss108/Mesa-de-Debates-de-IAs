@@ -54,7 +54,9 @@ function asKeyError(p: ProviderId, e: unknown): unknown {
 }
 
 /**
- * Um passo do debate: decisão do moderador + um turno de membro.
+ * Um passo do debate: decisão do moderador + uma fala de membro.
+ * Turno = rodada: acaba quando todos os membros online falaram, quando o moderador decide (`fim_do_turno`)
+ * ou, por segurança, após 2 falas por assento. O debate fecha depois de `maxTurns` turnos.
  * Não muta `state`; devolve o novo estado. Abort (`deps.signal`) encerra sem emitir mais nada.
  */
 export async function* runStep(
@@ -139,7 +141,13 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
 
   try {
     if (seqStart === 0) yield { type: 'debate_start', config };
-    if (s.memberTurns >= config.maxTurns) return yield* closing();
+    s.turno ??= 1; // estado de cliente antigo
+    s.falaram ??= [];
+    const novoTurno = () => {
+      s.turno++;
+      s.falaram = [];
+    };
+    if (s.turno > config.maxTurns) return yield* closing();
 
     // 1. Moderador
     let decision: ModeratorDecision | null = await decide(buildModeratorMessages(config, s), parseModeratorDecision);
@@ -148,11 +156,16 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
       decision = { acao: 'passar_palavra', fala: '' };
     }
     if (decision.acao === 'encerrar') return yield* closing();
+    // o moderador só fecha um turno em que alguém já falou (senão queimaria turnos vazios)
+    if (decision.fimDoTurno && s.falaram.length) {
+      novoTurno();
+      if (s.turno > config.maxTurns) return yield* closing();
+    }
     // 'provocar' segue como 'passar_palavra': a provocação está em `fala`
     const m = resolveTarget(decision, config, s);
     const fala = decision.fala.trim();
     if (fala) {
-      yield { type: 'turn_start', speaker: MODERATOR_ID, addressedTo: m };
+      yield { type: 'turn_start', speaker: MODERATOR_ID, addressedTo: m, turno: s.turno };
       yield { type: 'token', speaker: MODERATOR_ID, text: fala };
       yield { type: 'turn_end', speaker: MODERATOR_ID, fullText: fala };
       s.history.push({ speaker: MODERATOR_ID, text: fala });
@@ -165,7 +178,7 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     // 1 busca por turno, MAX_BUSCAS por debate
     let allowSearch = !!config.membrosPesquisam && s.buscasFeitas < MAX_BUSCAS;
     let messages = buildMemberMessages(config, s, seat, address, undefined, { allowSearch });
-    const turnStart: Body = { type: 'turn_start', speaker: m, ...(fala ? { addressedTo: MODERATOR_ID } : {}) };
+    const turnStart: Body = { type: 'turn_start', speaker: m, ...(fala ? { addressedTo: MODERATOR_ID } : {}), turno: s.turno };
     yield { type: 'status', member: m, state: 'pensando' };
 
     let turn: ParsedTag | undefined;
@@ -274,6 +287,10 @@ async function* step(config: DebateConfig, s: DebateState, deps: StepDeps, seqSt
     s.lastSpokeTurn[m] = s.memberTurns;
     s.failures[m] = 0;
     s.stalledSteps = 0;
+    s.falaram.push(m);
+    const off = offlineIds(s);
+    // ponytail: teto de 2 falas por assento para o turno não ficar preso num bate-bola que ignora alguém
+    if (config.seats.every((x) => s.falaram.includes(x.id) || off.includes(x.id)) || s.falaram.length >= 2 * config.seats.length) novoTurno();
 
     // 3. Mãos e resumo
     s.hands = computeHands({

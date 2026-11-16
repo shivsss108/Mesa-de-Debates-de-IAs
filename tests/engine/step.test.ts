@@ -289,9 +289,47 @@ describe('runStep', () => {
     expect(state.done).toBe(true);
   });
 
-  it('memberTurns === maxTurns → só fechamento (fallback após lixo 2×)', async () => {
+  it('turno = rodada: só vira quando todos falaram; a 2ª fala do mesmo membro não conta', async () => {
+    const fala = '[neutro|apontar|alvo:ninguem|posição:0] Oi.';
+    const { chat } = fakeChat({
+      'mistral:mod': ['m1', 'm1', 'm2'].map((para) => decision({ acao: 'passar_palavra', para, fala: '' })),
+      'groq:g1': [fala, fala],
+      'groq:g2': [fala],
+    });
+    const { deps } = makeDeps(chat);
+    let r = await run(cfg, fresh(), deps);
+    expect([r.state.turno, r.state.falaram]).toEqual([1, ['m1']]);
+    r = await run(cfg, r.state, deps, 50);
+    expect([r.state.turno, r.state.falaram]).toEqual([1, ['m1', 'm1']]);
+    r = await run(cfg, r.state, deps, 100);
+    expect([r.state.turno, r.state.falaram, r.state.memberTurns]).toEqual([2, [], 3]);
+    expect(r.events.find((e) => e.type === 'turn_start')).toMatchObject({ speaker: 'm2', turno: 1 });
+  });
+
+  it('moderador encerra o turno com fim_do_turno; turno vazio não é queimado', async () => {
+    const fala = '[neutro|apontar|alvo:ninguem|posição:0] Oi.';
+    const { chat } = fakeChat({
+      'mistral:mod': [1, 2].map(() => decision({ acao: 'passar_palavra', para: 'm1', fala: 'Vamos.', fim_do_turno: true })),
+      'groq:g1': [fala, fala],
+    });
+    const { deps } = makeDeps(chat);
+    let r = await run(cfg, fresh(), deps);
+    expect([r.state.turno, r.state.falaram]).toEqual([1, ['m1']]); // ninguém tinha falado: ignora
+    r = await run(cfg, r.state, deps, 50);
+    expect([r.state.turno, r.state.falaram]).toEqual([2, ['m1']]);
+    expect(r.events[0]).toMatchObject({ type: 'turn_start', speaker: 'moderador', turno: 2 });
+  });
+
+  it('fim_do_turno no último turno → fechamento', async () => {
+    const { chat } = fakeChat({ 'mistral:mod': [decision({ acao: 'passar_palavra', para: 'm1', fala: 'x', fim_do_turno: true }), 'lixo', 'lixo'] });
+    const { events, state } = await run(cfg, withTurns(3, { turno: 20, falaram: ['m1'] }), makeDeps(chat).deps, 40);
+    expect(types(events)).toEqual(['debate_end']);
+    expect(state.done).toBe(true);
+  });
+
+  it('turno > maxTurns → só fechamento (fallback após lixo 2×)', async () => {
     const { chat, calls } = fakeChat({ 'mistral:mod': ['lixo', 'lixo'] });
-    const { events, state } = await run(cfg, withTurns(20, { summary: 'resumo atual' }), makeDeps(chat).deps, 200);
+    const { events, state } = await run(cfg, withTurns(40, { turno: 21, summary: 'resumo atual' }), makeDeps(chat).deps, 200);
     expect(calls).toHaveLength(2);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ type: 'debate_end', summary: 'resumo atual', consensus: [], openPoints: [], verdict: '' });

@@ -24,4 +24,13 @@
 .primary:hover { background: var(--accent-2); transform: translateY(-1px); }
 .ghost { background: color-mix(in srgb, var(--bg) 60%, transparent); color: var(--fg); border: 1px solid var(--line); backdrop-filter: blur(6px); }
 .ghost:hover { border-color: var(--accent-2); transform: translateY(-1px); }
+.primary:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.quick { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: min(36rem, 100%); }
+.tema {
+  flex: 1 1 16rem; min-width: 0; font: inherit; font-size: 16px; padding: 14px 20px; border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--fg); border: 1px solid var(--line); backdrop-filter: blur(6px);
+}
+.tema:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint, .err { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); text-shadow: 0 1px 8px var(--bg); }
+.err { color: var(--danger); }
 .foot { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); padding: 0 16px; text-shadow: 0 1px 8px var(--bg); pointer-events: none; }

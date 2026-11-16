@@ -8,7 +8,7 @@
    "config": {
     "tema": "A inteligência artificial deve ter direitos?",
     "idioma": "pt-BR",
-    "maxTurns": 6,
+    "maxTurns": 2,
     "moderador": {
      "provider": "groq",
      "model": "llama-3.3-70b-versatile",
@@ -57,7 +57,7 @@
   {
    "seq": 1,
    "t": 600,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 1,
    "speaker": "moderador",
    "addressedTo": "ana"
   },
@@ -120,7 +120,7 @@
   {
    "seq": 10,
    "t": 2850,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 1,
    "speaker": "ana"
   },
   {
@@ -220,7 +220,7 @@
   {
    "seq": 23,
    "t": 5800,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 1,
    "speaker": "beto",
    "addressedTo": "ana"
   },
@@ -325,7 +325,7 @@
   {
    "seq": 38,
    "t": 9250,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 1,
    "speaker": "caio"
   },
   {
@@ -420,7 +420,7 @@
   {
    "seq": 51,
    "t": 12050,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 2,
    "speaker": "moderador",
    "addressedTo": "ana"
   },
@@ -490,7 +490,7 @@
   {
    "seq": 61,
    "t": 14550,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 2,
    "speaker": "ana",
    "addressedTo": "beto"
   },
@@ -573,7 +573,7 @@
   {
    "seq": 73,
    "t": 17250,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 2,
    "speaker": "beto"
   },
   {
@@ -642,7 +642,7 @@
   {
    "seq": 83,
    "t": 19600,
-   "type": "turn_start",
+   "type": "turn_start", "turno": 2,
    "speaker": "caio"
   },
   {

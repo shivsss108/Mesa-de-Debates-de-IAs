@@ -25,6 +25,6 @@ describe('validateConfig', () => {
   it('chave no env basta', () => expect(validateConfig(cfg(), {}, ['groq'])).toEqual([]));
   it('limites de assentos e turnos', () => {
     expect(validateConfig(cfg({ seats: [seat(1)] }), { groq: 'k' }, []).join()).toMatch(/2 a 8/);
-    expect(validateConfig(cfg({ maxTurns: 5 }), { groq: 'k' }, []).join()).toMatch(/6 e 60/);
+    expect(validateConfig(cfg({ maxTurns: 21 }), { groq: 'k' }, []).join()).toMatch(/1 e 20/);
   });
 });

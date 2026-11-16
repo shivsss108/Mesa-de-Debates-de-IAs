@@ -20,7 +20,8 @@ export interface SceneState {
   bubble: string;
   transcript: { speaker: string; text: string }[];
   hands: HandEntry[];
-  memberTurns: number;
+  /** turno (rodada) atual, vindo do turn_start */
+  turno: number;
   summary: string;
   /** query em andamento (membro pesquisando); limpa no turn_start */
   searching?: string;
@@ -30,7 +31,7 @@ export interface SceneState {
   error?: string;
 }
 
-export const initialScene: SceneState = { members: {}, turnSeq: -1, bubble: '', transcript: [], hands: [], memberTurns: 0, summary: '', extraSources: [] };
+export const initialScene: SceneState = { members: {}, turnSeq: -1, bubble: '', transcript: [], hands: [], turno: 1, summary: '', extraSources: [] };
 
 const newMember = (id: string): MemberView => ({ id, emotion: 'neutro', stance: 0, status: 'ok', handUp: false });
 
@@ -47,7 +48,7 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
         members: Object.fromEntries([MODERATOR_ID, ...e.config.seats.map((x) => x.id)].map((id) => [id, newMember(id)])),
       };
     case 'turn_start':
-      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, turnSeq: e.seq, bubble: '', searching: undefined };
+      return { ...s, speaker: e.speaker, addressedTo: e.addressedTo, turnSeq: e.seq, bubble: '', searching: undefined, turno: e.turno ?? s.turno };
     case 'token':
       return { ...s, bubble: s.bubble + e.text };
     case 'turn_end':
@@ -55,7 +56,6 @@ export function sceneReducer(s: SceneState, e: DebateEvent): SceneState {
         ...s,
         bubble: '',
         transcript: [...s.transcript, { speaker: e.speaker, text: e.fullText }],
-        memberTurns: e.speaker === MODERATOR_ID ? s.memberTurns : s.memberTurns + 1,
       };
     case 'emotion':
       return patch(s, e.member, { emotion: e.emotion });

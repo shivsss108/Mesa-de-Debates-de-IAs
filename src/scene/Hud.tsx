@@ -46,7 +46,7 @@ export function Hud({ scene, controls, camera, onCamera, hovered }: {
     <div className={s.root}>
       <div className={`${s.panel} ${s.bug}`}>
         <Logo badge={controls.badge} />
-        <span className={s.turn}>Turno {scene.memberTurns}/{c?.maxTurns ?? '–'}</span>
+        <span className={s.turn}>Turno {scene.turno}/{c?.maxTurns ?? '–'}</span>
       </div>
 
       {scene.hands.length > 0 && !scene.ended && (

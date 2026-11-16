@@ -49,6 +49,21 @@ describe('runLiveLoop', () => {
     expect(out).toHaveLength(1);
   });
 
+  it('pede o próximo passo enquanto a fala do atual ainda toca, no máximo 1 à frente', async () => {
+    const end: DebateEvent = { seq: 0, t: 0, type: 'turn_end', speaker: 'm1', fullText: 'x' };
+    const fetchStep = vi.fn(async () => sse([end], false));
+    const ctl = new AbortController();
+    let release = () => {};
+    const out = runLiveLoop(config, {}, () => {}, {
+      fetchStep, signal: ctl.signal, paused: () => false, waitFor: () => new Promise<void>((r) => (release = r)),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchStep).toHaveBeenCalledTimes(2); // passo 0 preso na fala, passo 1 já pedido, passo 2 espera
+    ctl.abort();
+    release();
+    expect(await out).toHaveLength(1);
+  });
+
   it('falha não-abort vira evento error gravado e emitido', async () => {
     const got: DebateEvent[] = [];
     const out = await runLiveLoop(config, {}, (e) => got.push(e), {

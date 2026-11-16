@@ -177,7 +177,7 @@ function Telao({ scene, speakerId, position }: { scene: SceneState; speakerId?: 
   }, [c]);
   const lines = telaoLines({
     tema: c?.tema ?? 'Mesa de IAs',
-    turno: scene.memberTurns,
+    turno: scene.turno,
     maxTurns: c?.maxTurns ?? 0, // sem config: status vazio
     orador: speakerId ? memberName(c, speakerId) : undefined,
     elapsedMs,

@@ -10,8 +10,8 @@ export function validateConfig(
   const out: string[] = [];
   if (!config.tema.trim()) out.push('Escreva o tema do debate.');
   if (config.seats.length < 2 || config.seats.length > 8) out.push('A mesa deve ter de 2 a 8 membros.');
-  if (!Number.isInteger(config.maxTurns) || config.maxTurns < 6 || config.maxTurns > 60)
-    out.push('O limite de turnos deve estar entre 6 e 60.');
+  if (!Number.isInteger(config.maxTurns) || config.maxTurns < 1 || config.maxTurns > 20)
+    out.push('O limite de turnos deve estar entre 1 e 20.');
   if (!config.moderador.model) out.push('Escolha o modelo do moderador.');
   for (const s of config.seats) if (!s.model) out.push(`Escolha o modelo de ${s.nome || s.id}.`);
   for (const s of config.seats)

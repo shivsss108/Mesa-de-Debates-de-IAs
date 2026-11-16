@@ -64,6 +64,13 @@ describe('synthesize', () => {
     expect(r.fatos).toHaveLength(2);
     expect(calls).toHaveLength(2);
   });
+  it('JSON cortado no meio de um fato → aproveita premissa e fatos completos, sem 2ª chamada', async () => {
+    const { chat, calls } = fakeChat([ok.slice(0, ok.indexOf('fantasma'))]);
+    const r = await run([fonte(1), fonte(2)], mk(chat));
+    expect(r.premissa).toEqual({ status: 'confirmada', nota: 'tudo certo' });
+    expect(r.fatos).toEqual([{ id: 'F1', texto: 'a', fontes: ['S1'] }]);
+    expect(calls).toHaveLength(1);
+  });
   it('quebrado nas duas → fallback por fonte', async () => {
     const r = await run([fonte(1, 'z'.repeat(900)), fonte(2)], mk(fakeChat(['x', 'y']).chat));
     expect(r.premissa).toEqual(FALLBACK);

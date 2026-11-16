@@ -30,7 +30,7 @@ const mkSeat = (i: number, nome: string, provider: ProviderId = 'groq', model = 
 
 function defaultConfig(): DebateConfig {
   const seats = randomizePersonalities(defaultNames(4).map((n, i) => mkSeat(i, n)));
-  return { tema: '', idioma: 'pt-BR', maxTurns: 20, moderador: { provider: 'groq', model: '', provocacao: 'media' }, seats };
+  return { tema: '', idioma: 'pt-BR', maxTurns: 5, moderador: { provider: 'groq', model: '', provocacao: 'media' }, seats };
 }
 
 function readSession<T>(key: string): T | undefined {
@@ -198,8 +198,8 @@ export default function ConfigPage() {
               </select>
             </label>
             <label className={s.field}>
-              Turnos de membros (6–60)
-              <input className={s.input} type="number" min={6} max={60} value={turnsText ?? (Number.isNaN(config.maxTurns) ? '' : String(config.maxTurns))}
+              Turnos (1–20)
+              <input className={s.input} type="number" min={1} max={20} value={turnsText ?? (Number.isNaN(config.maxTurns) ? '' : String(config.maxTurns))}
                 onChange={(e) => {
                   setTurnsText(e.target.value);
                   // vazio vira NaN: validateConfig acusa e o botão fica desabilitado

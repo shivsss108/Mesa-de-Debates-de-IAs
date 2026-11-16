@@ -1,6 +1,7 @@
 import { runStep } from '@/engine/step';
 import { validateStepBody } from '@/engine/validate';
 import { chat } from '@/providers/client';
+import { QUICK_STATE_MAX, quickSetup } from '@/quick/quick';
 
 export const maxDuration = 60;
 
@@ -13,7 +14,17 @@ export async function POST(req: Request) {
   }
   const v = validateStepBody(body);
   if (!v.ok) return Response.json({ error: v.error }, { status: 400 });
-  const { config, state, keys, seqStart } = v.value;
+  const { state, seqStart } = v.value;
+  let { config, keys } = v.value;
+  // debate rápido: config e chave são do servidor; do cliente só valem o tema, a semente e o estado (com teto)
+  const seed = (body as { quick?: unknown }).quick;
+  if (seed !== undefined) {
+    if (JSON.stringify(state).length > QUICK_STATE_MAX) return Response.json({ error: 'Estado grande demais.' }, { status: 400 });
+    const q = await quickSetup(req, config.tema, seed);
+    if ('error' in q) return Response.json({ error: q.error }, { status: q.status });
+    config = q.config;
+    keys = { nvidia: q.key };
+  }
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -27,7 +38,9 @@ export async function POST(req: Request) {
       };
       let sent = 0;
       try {
-        const gen = runStep(config, state, { chat, keys, now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), signal: req.signal }, seqStart);
+        // debate rápido: sem raciocínio, para o passo caber nos 60 s
+        const ask: typeof chat = seed === undefined ? chat : (r) => chat({ ...r, noThink: true });
+        const gen = runStep(config, state, { chat: ask, keys, now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), signal: req.signal }, seqStart);
         for (;;) {
           const r = await gen.next();
           if (r.done) {

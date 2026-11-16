@@ -15,8 +15,21 @@ const line = (s: string) => defang(s).replace(/\s+/g, ' ').trim();
 
 const str =(v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
+/** Resposta cortada no limite de tokens: fecha o JSON depois do último fato completo. */
+function salvage(raw: string): unknown {
+  const start = raw.indexOf('{');
+  for (let end = raw.lastIndexOf('}'); end > start; end = raw.lastIndexOf('}', end - 1)) {
+    try {
+      return JSON.parse(raw.slice(start, end + 1) + ']}');
+    } catch {}
+  }
+  return null;
+}
+
 function parse(raw: string, ids: Set<string>): Saida | null {
-  const o = firstJsonObject(raw) as Record<string, unknown> | null;
+  let o = firstJsonObject(raw) as Record<string, unknown> | null;
+  // num JSON cortado, firstJsonObject devolve um objeto interno (a premissa), sem `fatos`
+  if (!Array.isArray(o?.fatos)) o = salvage(raw) as Record<string, unknown> | null;
   if (!o || typeof o !== 'object' || !Array.isArray(o.fatos)) return null;
   const p = (o.premissa ?? {}) as Record<string, unknown>;
   const status = STATUS.find((s) => s === p.status) ?? 'nao_encontrada';
@@ -76,8 +89,11 @@ export async function synthesize(
       raw = await ask(t, msgs, 2000);
       const r = parse(raw, ids);
       if (r) return r;
+      console.warn(`[synthesize] tentativa ${i + 1}: resposta sem JSON válido (${raw.length} chars):`, raw.slice(0, 200), '…', raw.slice(-200));
     } catch (e) {
       if (isFatal(e, t)) throw e;
+      // o motivo não vai ao cliente (pode carregar detalhes do provedor); a chave já foi mascarada em chat()
+      console.warn(`[synthesize] tentativa ${i + 1} falhou:`, e instanceof Error ? e.message : e);
     }
   }
   return fallback(fontes);

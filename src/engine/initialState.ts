@@ -4,6 +4,8 @@ export function createInitialState(config: DebateConfig, now: number): DebateSta
   return {
     startedAt: now,
     memberTurns: 0,
+    turno: 1,
+    falaram: [],
     summary: '',
     history: [],
     stances: Object.fromEntries(config.seats.map((s) => [s.id, 0])),

@@ -35,7 +35,7 @@ export function useVoice() {
     if (e.type !== 'turn_end') return;
     const c = config.current;
     const lang = c?.idioma || 'pt-BR';
-    const ids = c ? [...c.seats.map((s) => s.id), MODERATOR_ID] : [];
+    const ids = c ? [...c.seats, { id: MODERATOR_ID, nome: 'Moderador' }] : [];
     const profile = onRef.current && c ? assignVoices(ids, globalThis.speechSynthesis.getVoices(), lang)[e.speaker] : undefined;
     await say({ seq: e.seq, speaker: e.speaker, text: e.fullText }, { profile, lang, speed: () => speed.current });
   }, []);

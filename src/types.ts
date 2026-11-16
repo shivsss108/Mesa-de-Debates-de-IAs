@@ -65,7 +65,12 @@ export interface HandEntry {
 
 export interface DebateState {
   startedAt: number;
+  /** falas de membros até agora: relógio interno (cooldown de offline, urgência, resumo) */
   memberTurns: number;
+  /** turno (rodada) atual, a partir de 1; estado antigo sem o campo = 1 */
+  turno: number;
+  /** quem falou no turno atual, em ordem, com repetição; estado antigo sem o campo = [] */
+  falaram: string[];
   summary: string;
   history: { speaker: string; text: string }[];
   stances: Record<string, number>;
@@ -87,7 +92,7 @@ export interface DebateState {
 
 export type DebateEvent = { seq: number; t: number } & (
   | { type: 'debate_start'; config: DebateConfig }
-  | { type: 'turn_start'; speaker: string; addressedTo?: string }
+  | { type: 'turn_start'; speaker: string; addressedTo?: string; turno?: number }
   | { type: 'token'; speaker: string; text: string }
   | { type: 'turn_end'; speaker: string; fullText: string }
   | { type: 'emotion'; member: string; emotion: Emotion }

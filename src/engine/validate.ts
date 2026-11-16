@@ -50,8 +50,8 @@ export function validateStepBody(body: unknown): { ok: true; value: StepBody } |
   const { config, state, keys, seqStart } = body;
   if (!isObj(config)) return bad('config ausente.');
   if (!str(config.tema)) return bad('Tema vazio.');
-  if (!Number.isInteger(config.maxTurns) || (config.maxTurns as number) < 6 || (config.maxTurns as number) > 60)
-    return bad('maxTurns deve estar entre 6 e 60.');
+  if (!Number.isInteger(config.maxTurns) || (config.maxTurns as number) < 1 || (config.maxTurns as number) > 20)
+    return bad('maxTurns deve estar entre 1 e 20.');
   if (config.dossie !== undefined) {
     const e = validateDossie(config.dossie);
     if (e) return bad(e);

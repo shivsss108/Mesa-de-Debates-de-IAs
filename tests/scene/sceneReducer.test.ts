@@ -23,7 +23,7 @@ describe('sceneReducer', () => {
       { type: 'token', speaker: 'moderador', text: 'Olá ' },
       { type: 'token', speaker: 'moderador', text: 'm1' },
       { type: 'turn_end', speaker: 'moderador', fullText: 'Olá m1' },
-      { type: 'turn_start', speaker: 'm1' },
+      { type: 'turn_start', speaker: 'm1', turno: 2 },
       { type: 'token', speaker: 'm1', text: 'Oi' },
     ]);
     let s = events.reduce(sceneReducer, initialScene);
@@ -45,7 +45,7 @@ describe('sceneReducer', () => {
       { speaker: 'moderador', text: 'Olá m1' },
       { speaker: 'm1', text: 'Oi' },
     ]);
-    expect(s.memberTurns).toBe(1);
+    expect(s.turno).toBe(2); // vem do turn_start; sem o campo (replay antigo) mantém o anterior
     expect(s.members.m1.emotion).toBe('feliz');
     expect(s.members.m1.gesture).toEqual({ name: 'apontar', at: 20 });
     expect(s.members.m2.handUp).toBe(true);

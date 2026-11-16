@@ -23,8 +23,10 @@ export default function MesaPage() {
 }
 
 function Mesa() {
-  const name = useSearchParams().get('replay');
-  return name ? <ReplayLoader name={name} /> : <Live />;
+  const q = useSearchParams();
+  const name = q.get('replay');
+  const quick = q.get('quick'); // semente do debate rápido
+  return name ? <ReplayLoader name={name} /> : <Live quick={quick === null ? undefined : Number(quick)} />;
 }
 
 function ReplayLoader({ name }: { name: string }) {
@@ -65,8 +67,10 @@ function readSession<T>(key: string): T | undefined {
   }
 }
 
-function Live() {
+function Live({ quick }: { quick?: number }) {
   const router = useRouter();
+  const isQuick = quick !== undefined;
+  const back = isQuick ? '/' : '/config';
   const v = useVoice();
   const d = useLiveDebate(v.waitFor);
   v.config.current = d.scene.config;
@@ -74,21 +78,22 @@ function Live() {
   const { start, stop } = d;
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const config = readSession<DebateConfig>('mesa:config');
-    if (!config?.seats?.length) return router.replace('/config');
-    start(config, readSession<Partial<Record<ProviderId, string>>>('mesa:keys') ?? {});
+    const config = readSession<DebateConfig>(isQuick ? 'mesa:quick' : 'mesa:config');
+    if (!config?.seats?.length) return router.replace(back);
+    // debate rápido: a chave é a do servidor, as do visitante nem saem do navegador
+    start(config, isQuick ? {} : (readSession<Partial<Record<ProviderId, string>>>('mesa:keys') ?? {}), quick);
     setReady(true);
-  }, [router, start]);
+  }, [router, start, quick, isQuick, back]);
   if (!ready) return null;
   return (
     <>
       <Stage
         scene={d.scene}
         defaultCamera="diretor"
-        controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push('/config'); },
+        controls={{ pause: d.pause, speed: d.speed, setSpeed: d.setSpeed, onStop: () => { stop(); router.push(back); },
           onVoice: v.toggle, voiceOn: v.on, voiceAvailable: v.available, badge: 'AO VIVO' }}
       />
-      <EndPanel scene={d.scene} events={d.events} onNew={() => router.push('/config')} />
+      <EndPanel scene={d.scene} events={d.events} onNew={() => router.push(back)} />
     </>
   );
 }

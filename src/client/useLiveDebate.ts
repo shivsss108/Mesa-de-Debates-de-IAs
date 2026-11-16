@@ -20,30 +20,70 @@ export async function runLiveLoop(
   },
 ): Promise<DebateEvent[]> {
   const { signal } = opts;
-  const events: DebateEvent[] = [];
-  let state: DebateState = createInitialState(config, Date.now());
-  try {
-    while (!signal.aborted && !state.done) {
+  const events: DebateEvent[] = []; // já exibidos, na ordem
+  // Fila entre a rede e a tela: o passo seguinte é gerado enquanto a fala do atual ainda toca (waitFor).
+  type Item = { e: DebateEvent } | { end: true; err?: unknown; last: boolean };
+  const queue: Item[] = [];
+  const waiters: (() => void)[] = [];
+  const notify = () => waiters.splice(0).forEach((f) => f());
+  const changed = () => new Promise<void>((r) => waiters.push(r));
+  signal.addEventListener('abort', notify, { once: true });
+  let shown = 0; // passos exibidos por inteiro
+
+  const produce = async () => {
+    let state: DebateState = createInitialState(config, Date.now());
+    let seq = 0;
+    for (let k = 0; !signal.aborted && !state.done; k++) {
+      // ponytail: no máximo 1 passo à frente da tela; parar o debate desperdiça até 1 passo de cota
+      while (k > shown + 1 && !signal.aborted) await changed();
       while (opts.paused() && !signal.aborted) await sleep(200);
-      if (signal.aborted) break;
-      const stream = await opts.fetchStep({ config, state, keys, seqStart: events.length }, signal);
+      if (signal.aborted) return;
       let next: DebateState | undefined;
-      for await (const m of readSSE(stream)) {
-        if (signal.aborted) break;
-        if (m.event === 'state') next = JSON.parse(m.data) as DebateState;
-        else {
-          const e = JSON.parse(m.data) as DebateEvent;
-          events.push(e);
-          onEvent(e);
-          if (e.type === 'turn_end') await opts.waitFor?.(e);
+      let lastWasError = false;
+      try {
+        const stream = await opts.fetchStep({ config, state, keys, seqStart: seq }, signal);
+        for await (const m of readSSE(stream)) {
+          if (signal.aborted) return;
+          if (m.event === 'state') next = JSON.parse(m.data) as DebateState;
+          else {
+            const e = JSON.parse(m.data) as DebateEvent;
+            seq++;
+            lastWasError = e.type === 'error';
+            queue.push({ e });
+            notify();
+          }
         }
+        // step sem `state` conta como erro e não dispara novo passo (o servidor pode já ter mandado o seu `error`)
+        if (!next && !lastWasError && !signal.aborted) throw new Error('O passo não terminou. Tente novamente.');
+      } catch (err) {
+        queue.push({ end: true, err, last: true });
+        notify();
+        return;
       }
-      // step sem `state` conta como erro e não dispara novo passo (o servidor pode já ter mandado o seu `error`)
-      if (!next) {
-        if (signal.aborted || events.at(-1)?.type === 'error') break;
-        throw new Error('O passo não terminou. Tente novamente.');
-      }
+      queue.push({ end: true, last: !next || next.done });
+      notify();
+      if (!next) return;
       state = next;
+    }
+  };
+
+  void produce();
+  try {
+    for (;;) {
+      while (!queue.length && !signal.aborted) await changed();
+      if (signal.aborted) break;
+      const it = queue.shift()!;
+      if ('end' in it) {
+        if ('err' in it) throw it.err;
+        shown++;
+        notify();
+        if (it.last) break;
+        while (opts.paused() && !signal.aborted) await sleep(200); // o passo adiantado não fura a pausa
+        continue;
+      }
+      events.push(it.e);
+      onEvent(it.e);
+      if (it.e.type === 'turn_end') await opts.waitFor?.(it.e);
     }
   } catch (err) {
     // abort fica em silêncio; qualquer outra falha vira evento `error` para a cena mostrar
@@ -73,7 +113,8 @@ export function useLiveDebate(waitFor?: (e: DebateEvent) => Promise<void>) {
   const stop = useCallback(() => ctl.current?.abort(), []);
   useEffect(() => stop, [stop]); // sair da página aborta o passo em andamento
 
-  const start = useCallback((config: DebateConfig, keys: Partial<Record<ProviderId, string>>) => {
+  /** `quick`: semente do debate rápido (o servidor monta a config e usa a própria chave). */
+  const start = useCallback((config: DebateConfig, keys: Partial<Record<ProviderId, string>>, quick?: number) => {
     ctl.current?.abort();
     const c = new AbortController();
     ctl.current = c;
@@ -82,7 +123,7 @@ export function useLiveDebate(waitFor?: (e: DebateEvent) => Promise<void>) {
       const res = await fetch('/api/debate/step', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, quick }),
         signal,
       });
       if (!res.ok || !res.body) {

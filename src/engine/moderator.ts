@@ -1,7 +1,7 @@
 import { MODERATOR_ID, offlineIds } from '@/types';
 import type { DebateConfig, DebateState } from '@/types';
 
-export type ModeratorDecision = { acao: 'passar_palavra' | 'provocar' | 'encerrar'; para?: string; fala: string };
+export type ModeratorDecision = { acao: 'passar_palavra' | 'provocar' | 'encerrar'; para?: string; fala: string; fimDoTurno?: boolean };
 
 /** Extrai o 1º objeto JSON balanceado do texto (tolera ```json e texto ao redor). */
 export function firstJsonObject(raw: string): unknown {
@@ -36,6 +36,7 @@ export function parseModeratorDecision(raw: string): ModeratorDecision | null {
     acao: o.acao as ModeratorDecision['acao'],
     para: typeof o.para === 'string' ? o.para : undefined,
     fala: typeof o.fala === 'string' ? o.fala : '',
+    ...(o.fim_do_turno === true ? { fimDoTurno: true } : {}),
   };
 }
 
