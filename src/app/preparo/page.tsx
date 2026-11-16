@@ -8,7 +8,7 @@ import type { Progress, ResearchInput } from '@/research/pipeline';
 import { safeHref } from '@/scene/Sources';
 import type { DebateConfig, Dossie, ProviderId } from '@/types';
 import { Logo } from '../Logo';
-import type { Repertorio } from '../config/Repertorio';
+import { REPERTORIO_VAZIO, type Repertorio } from '../config/Repertorio';
 import c from '../config/config.module.css';
 import s from './preparo.module.css';
 
@@ -30,6 +30,16 @@ function writeSession(key: string, v: unknown) {
   } catch {
     // modo privado/cota cheia: só não sobrevive à navegação
   }
+}
+
+/** Semente do debate rápido (`?quick=…`), ou null no fluxo normal. Só no cliente. */
+const quickSeed = () => new URLSearchParams(location.search).get('quick');
+/** O debate rápido guarda config e dossiê em chaves próprias: não pisa na mesa que o usuário montou. */
+function onde() {
+  const q = quickSeed();
+  return q === null
+    ? { config: 'mesa:config', dossie: 'mesa:dossie', mesa: '/mesa', back: '/config' }
+    : { config: 'mesa:quick', dossie: 'mesa:quick:dossie', mesa: `/mesa?quick=${q}`, back: '/' };
 }
 
 const STATUS = { confirmada: 'Premissa confirmada', nao_encontrada: 'Premissa não encontrada', contradita: 'Premissa contradita' };
@@ -79,7 +89,9 @@ export default function PreparoPage() {
         tema: cfg.tema, idioma: cfg.idioma, moderador: { provider: cfg.moderador.provider, model: cfg.moderador.model },
         busca: r.busca, links: r.links, textos: r.textos, modo: r.modo, keys: k,
       };
-      const res = await fetch('/api/research', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal: ctl.signal });
+      const q = quickSeed(); // com semente, o servidor ignora o resto e pesquisa com a própria chave
+      const body = JSON.stringify(q === null ? input : { ...input, quick: Number(q) });
+      const res = await fetch('/api/research', { method: 'POST', headers: { 'content-type': 'application/json' }, body, signal: ctl.signal });
       if (!res.ok || !res.body) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? 'Falha ao pesquisar.');
@@ -103,16 +115,18 @@ export default function PreparoPage() {
   }, []);
 
   useEffect(() => {
-    const cfg = readSession<DebateConfig>('mesa:config');
-    const r = readSession<Repertorio>('mesa:repertorio');
-    if (!cfg?.seats?.length || !r) return router.replace('/config');
-    const k = readSession<Keys>('mesa:keys') ?? {};
+    const rapido = quickSeed() !== null;
+    const w = onde();
+    const cfg = readSession<DebateConfig>(w.config);
+    const r = rapido ? REPERTORIO_VAZIO : readSession<Repertorio>('mesa:repertorio');
+    if (!cfg?.seats?.length || !r) return router.replace(w.back);
+    const k = rapido ? {} : (readSession<Keys>('mesa:keys') ?? {});
     // sessionStorage só existe no cliente: inicializa aqui (mesmo padrão de /config)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfig(cfg);
     setRep(r);
     setKeys(k);
-    const salvo = readSession<{ tema: string; sig?: string; dossie: Dossie }>('mesa:dossie');
+    const salvo = readSession<{ tema: string; sig?: string; dossie: Dossie }>(w.dossie);
     if (salvo?.tema === cfg.tema && salvo.sig === assinatura(cfg, r) && salvo.dossie) setDossie(salvo.dossie);
     else void research(cfg, r, k);
     return () => abort.current?.abort();
@@ -120,7 +134,7 @@ export default function PreparoPage() {
 
   // guarda as edições: recarregar não pesquisa de novo
   useEffect(() => {
-    if (config && rep && dossie) writeSession('mesa:dossie', { tema: config.tema, sig: assinatura(config, rep), dossie });
+    if (config && rep && dossie) writeSession(onde().dossie, { tema: config.tema, sig: assinatura(config, rep), dossie });
   }, [config, rep, dossie]);
 
   if (!config || !rep) return null;
@@ -142,8 +156,8 @@ export default function PreparoPage() {
   };
 
   const goMesa = (cfg: DebateConfig) => {
-    writeSession('mesa:config', cfg);
-    router.push('/mesa');
+    writeSession(onde().config, cfg);
+    router.push(onde().mesa);
   };
 
   const comecar = async () => {
@@ -180,7 +194,7 @@ export default function PreparoPage() {
 
   const denovo = () => {
     try {
-      sessionStorage.removeItem('mesa:dossie');
+      sessionStorage.removeItem(onde().dossie);
     } catch {
       // sem storage: nada a limpar
     }
@@ -196,7 +210,7 @@ export default function PreparoPage() {
             <h1>Preparar o repertório</h1>
             <p>{config.tema}</p>
           </div>
-          <Link href="/config" className={c.back}>← Configuração</Link>
+          <Link href={onde().back} className={c.back}>{quickSeed() === null ? '← Configuração' : '← Início'}</Link>
         </header>
 
         <div aria-live="polite">

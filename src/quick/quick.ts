@@ -9,6 +9,8 @@ export const QUICK_SEATS = 4;
 export const QUICK_TURNS = 2;
 /** teto do `state` que o cliente devolve a cada passo (vira prompt pago com a chave do servidor) */
 export const QUICK_STATE_MAX = 40_000;
+/** a pesquisa do debate rápido: só busca de notícias, nada enviado pelo visitante */
+export const REPERTORIO_RAPIDO = { busca: true, links: [], textos: [], modo: 'todos' as const };
 const PER_IP = 60; // passos por hora: uns 3 debates
 const GLOBAL = 600;
 const HOUR = 3_600_000;

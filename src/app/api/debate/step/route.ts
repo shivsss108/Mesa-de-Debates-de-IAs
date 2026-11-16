@@ -16,13 +16,13 @@ export async function POST(req: Request) {
   if (!v.ok) return Response.json({ error: v.error }, { status: 400 });
   const { state, seqStart } = v.value;
   let { config, keys } = v.value;
-  // debate rápido: config e chave são do servidor; do cliente só valem o tema, a semente e o estado (com teto)
+  // debate rápido: config e chave são do servidor; do cliente só valem o tema, a semente, o dossiê e o estado (com teto)
   const seed = (body as { quick?: unknown }).quick;
   if (seed !== undefined) {
     if (JSON.stringify(state).length > QUICK_STATE_MAX) return Response.json({ error: 'Estado grande demais.' }, { status: 400 });
     const q = await quickSetup(req, config.tema, seed);
     if ('error' in q) return Response.json({ error: q.error }, { status: q.status });
-    config = q.config;
+    config = { ...q.config, dossie: config.dossie }; // o dossiê revisado vem do cliente, já validado (≤ 8 KB)
     keys = { nvidia: q.key };
   }
 

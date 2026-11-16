@@ -29,7 +29,7 @@ As chaves vão do navegador ao servidor só na requisição (nada é salvo nem l
 
 ## Recursos da v1
 
-- Debate rápido: o visitante digita só o tema e o servidor monta a mesa (4 debatedores, 2 turnos) com a chave NVIDIA do deploy
+- Debate rápido: o visitante digita só o tema; o servidor pesquisa notícias, mostra o repertório para revisão e monta a mesa (4 debatedores, 2 turnos) com a chave NVIDIA do deploy
 - Mesa redonda com 2 a 8 membros mais moderador
 - Moderador ativo: passa a palavra, provoca, atualiza o resumo e encerra
 - Vontade de falar: mão levantada em cena, quem é citado ou discorda tende a responder
@@ -71,7 +71,8 @@ Chaves no ambiente do servidor valem para qualquer visitante, que gastaria a sua
 A exceção é o **debate rápido**, pensado para quem só quer experimentar:
 
 - Com `NVIDIA_API_KEY` definida, a home mostra um campo de tema. Sem ela, o campo não aparece e o resto do app funciona igual.
-- A chave só é usada nesse modo. Do visitante valem o tema e o estado do debate (com teto de tamanho); a mesa, os modelos e os prompts são montados no servidor a cada passo.
+- Antes do debate o servidor pesquisa notícias sobre o tema (cerca de 25 s) e o visitante revisa o repertório.
+- A chave só é usada nesse modo. Do visitante valem o tema, o repertório revisado (até 8 KB) e o estado do debate (com teto de tamanho); a mesa, os modelos e os prompts são montados no servidor a cada passo.
 - O modelo é o melhor Nemotron do catálogo NVIDIA, ou o que estiver em `MESA_QUICK_MODEL`. As chamadas vão sem raciocínio, para cada passo caber no limite de 60 s da rota.
 - Há um limite de 60 passos por hora por IP e 600 no total. O contador fica na memória de cada instância: segura uso casual, não um ataque. Para um limite de verdade, troque por um contador compartilhado (Upstash, Vercel KV).
 

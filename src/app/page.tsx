@@ -46,7 +46,7 @@ export default function Home() {
       const j = (await res.json()) as { config?: unknown; error?: string };
       if (!res.ok || !j.config) throw new Error(j.error ?? 'Não foi possível começar o debate.');
       sessionStorage.setItem('mesa:quick', JSON.stringify(j.config));
-      router.push(`/mesa?quick=${seed}`);
+      router.push(`/preparo?quick=${seed}`);
     } catch (x) {
       setErr(x instanceof Error ? x.message : 'Não foi possível começar o debate.');
       setBusy(false);
@@ -67,7 +67,7 @@ export default function Home() {
             <input className={styles.tema} aria-label="Tema do debate rápido" placeholder="Sobre o que a mesa vai debater?"
               maxLength={300} required value={tema} onChange={(e) => setTema(e.target.value)} />
             <button type="submit" className={styles.primary} disabled={busy || !tema.trim()}>{busy ? 'Preparando…' : 'Debate rápido'}</button>
-            <p className={styles.hint}>4 debatedores, 2 turnos. Sem cadastro e sem chave de API.</p>
+            <p className={styles.hint}>Pesquisa notícias sobre o tema e põe 4 debatedores para discutir. Sem cadastro e sem chave de API.</p>
             {err && <p role="alert" className={styles.err}>{err}</p>}
           </form>
         )}

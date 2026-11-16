@@ -2,6 +2,7 @@ import { chat } from '@/providers/client';
 import { resolveKey } from '@/providers/catalog';
 import { PROVIDERS } from '@/providers/table';
 import { parseResearchBody, runResearch } from '@/research/pipeline';
+import { quickSetup, REPERTORIO_RAPIDO } from '@/quick/quick';
 
 export const maxDuration = 60;
 
@@ -14,8 +15,14 @@ export async function POST(req: Request) {
   }
   const v = parseResearchBody(body);
   if (!v.ok) return Response.json({ error: v.error }, { status: 400 });
-  const { keys, ...input } = v.value;
+  const { keys, ...sent } = v.value;
+  // debate rápido: só busca de notícias sobre o tema, com o modelo e a chave do servidor, sem raciocínio
+  const seed = (body as { quick?: unknown }).quick;
+  const q = seed === undefined ? undefined : await quickSetup(req, sent.tema, seed);
+  if (q && 'error' in q) return Response.json({ error: q.error }, { status: q.status });
+  const input = q ? { ...REPERTORIO_RAPIDO, tema: q.config.tema, idioma: q.config.idioma, moderador: q.config.moderador } : sent;
   const { provider, model } = input.moderador;
+  const ask: typeof chat = q ? (r) => chat({ ...r, noThink: true }) : chat;
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -28,11 +35,11 @@ export async function POST(req: Request) {
         } catch {}
       };
       const fail = (message: string) => send(`data: ${JSON.stringify({ type: 'error', message })}\n\n`);
-      const apiKey = resolveKey(provider, keys);
+      const apiKey = q ? q.key : resolveKey(provider, keys);
       if (!apiKey) fail(`Sem chave de API para ${PROVIDERS[provider].nome}.`);
       else {
         try {
-          const dossie = await runResearch(input, { t: { chat, provider, model, apiKey, signal: req.signal } }, (p) =>
+          const dossie = await runResearch(input, { t: { chat: ask, provider, model, apiKey, signal: req.signal } }, (p) =>
             send(`event: progress\ndata: ${JSON.stringify(p)}\n\n`),
           );
           send(`event: dossie\ndata: ${JSON.stringify(dossie)}\n\n`);
