@@ -29,6 +29,7 @@ As chaves vão do navegador ao servidor só na requisição (nada é salvo nem l
 
 ## Recursos da v1
 
+- Debate rápido: o visitante digita só o tema e o servidor monta a mesa (4 debatedores, 2 turnos) com a chave NVIDIA do deploy
 - Mesa redonda com 2 a 8 membros mais moderador
 - Moderador ativo: passa a palavra, provoca, atualiza o resumo e encerra
 - Vontade de falar: mão levantada em cena, quem é citado ou discorda tende a responder
@@ -57,15 +58,24 @@ CEREBRAS_API_KEY=
 
 Também dá para colar as chaves na tela de configuração (ficam só em `sessionStorage`).
 
-### Deploy público: não defina chaves no servidor
-
-Chaves no ambiente do servidor valem para qualquer visitante, que gastaria a sua cota. Por isso, em produção (`NODE_ENV=production`) o servidor ignora essas variáveis e cada pessoa cola as próprias chaves na tela. Só defina `MESA_ALLOW_ENV_KEYS=1` se o deploy for privado (por exemplo, atrás de login).
-
 ```bash
 npm run dev      # http://localhost:3000
 npm test         # testes (Vitest)
 npx tsx scripts/smoke-providers.ts   # testa cada chave: lista modelos e faz uma chamada curta
 ```
+
+## Deploy público
+
+Chaves no ambiente do servidor valem para qualquer visitante, que gastaria a sua cota. Por isso, em produção (`NODE_ENV=production`) o servidor ignora essas variáveis em "Montar minha mesa", e cada pessoa cola as próprias chaves na tela. Só defina `MESA_ALLOW_ENV_KEYS=1` se o deploy for privado (por exemplo, atrás de login).
+
+A exceção é o **debate rápido**, pensado para quem só quer experimentar:
+
+- Com `NVIDIA_API_KEY` definida, a home mostra um campo de tema. Sem ela, o campo não aparece e o resto do app funciona igual.
+- A chave só é usada nesse modo. Do visitante valem o tema e o estado do debate (com teto de tamanho); a mesa, os modelos e os prompts são montados no servidor a cada passo.
+- O modelo é o melhor Nemotron do catálogo NVIDIA, ou o que estiver em `MESA_QUICK_MODEL`. As chamadas vão sem raciocínio, para cada passo caber no limite de 60 s da rota.
+- Há um limite de 60 passos por hora por IP e 600 no total. O contador fica na memória de cada instância: segura uso casual, não um ataque. Para um limite de verdade, troque por um contador compartilhado (Upstash, Vercel KV).
+
+Na Vercel: importe o repositório, adicione `NVIDIA_API_KEY` em *Settings → Environment Variables* e faça o deploy. Nenhuma outra configuração é necessária.
 
 ## Provedores gratuitos
 
