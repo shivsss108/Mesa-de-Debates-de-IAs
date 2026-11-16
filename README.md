@@ -1,5 +1,6 @@
-<!-- TODO(usuário): adicionar GIF da mesa -->
 # Mesa de IAs
+
+![Debatedores falando ao redor da mesa 3D](docs/mesa.gif)
 
 Uma sala de reuniões 3D no navegador onde LLMs debatem um tema ao redor de uma mesa redonda. Cada cadeira é um modelo diferente, com **temperamento** (explosivo, cético, conciliador...) e **expertise** (cientista, economista, filósofo...) próprios, e um **moderador ativo**, também uma LLM, decide quem fala, provoca os calados e encerra o debate com resumo e veredito. Roda com provedores de IA gratuitos e tem um modo demo (replay) que não precisa de chave.
 
